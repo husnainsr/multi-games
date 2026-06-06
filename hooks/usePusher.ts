@@ -40,10 +40,14 @@ function getPusher(playerId: string, roomCode: string): PusherClient {
 export function usePusherChannel(
   channelName: string | null,
   handlers: Record<string, (data: unknown) => void>,
-  deps: unknown[],
   playerId: string,
   roomCode: string
 ) {
+  // Keep a ref to handlers so Pusher callbacks always call the latest version
+  // without needing to re-subscribe when state changes.
+  const handlersRef = useRef(handlers);
+  handlersRef.current = handlers;
+
   const channelRef = useRef<Channel | null>(null);
 
   useEffect(() => {
@@ -53,17 +57,22 @@ export function usePusherChannel(
     const channel = pusher.subscribe(channelName);
     channelRef.current = channel;
 
-    Object.entries(handlers).forEach(([event, handler]) => {
-      channel.bind(event, handler);
+    // Stable wrapper functions — bound once, always dispatch to latest handler
+    const wrappers: Record<string, (data: unknown) => void> = {};
+    Object.keys(handlers).forEach(event => {
+      wrappers[event] = (data: unknown) => handlersRef.current[event]?.(data);
+      channel.bind(event, wrappers[event]);
     });
 
     return () => {
-      Object.keys(handlers).forEach(event => channel.unbind(event));
+      Object.entries(wrappers).forEach(([event, fn]) => channel.unbind(event, fn));
       pusher.unsubscribe(channelName);
       channelRef.current = null;
     };
+  // handlers is intentionally excluded — we use handlersRef for always-fresh access.
+  // Only re-subscribe when the channel identity changes.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channelName, playerId, roomCode, ...deps]);
+  }, [channelName, playerId, roomCode]);
 
   return channelRef;
 }

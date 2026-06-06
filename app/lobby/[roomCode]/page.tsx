@@ -84,10 +84,28 @@ export default function LobbyPage({ params }: { params: Promise<{ roomCode: stri
   usePusherChannel(
     room ? roomChannel(roomCode) : null,
     handlers,
-    [room?.phase],
     playerId ?? '',
     roomCode
   );
+
+  // Polling fallback: catch missed Pusher events every 3 seconds
+  useEffect(() => {
+    if (!roomCode || !playerId) return;
+    const id = setInterval(() => {
+      fetch(`/api/rooms/${roomCode}`, { cache: 'no-store' })
+        .then(r => r.json())
+        .then((data: GameRoom) => {
+          if (!data || (data as unknown as { error: string }).error) return;
+          if (data.phase !== 'lobby') {
+            router.replace(`/game/${roomCode}`);
+            return;
+          }
+          setRoom(data);
+        })
+        .catch(() => {});
+    }, 3000);
+    return () => clearInterval(id);
+  }, [roomCode, playerId, router]);
 
   async function updateSetting(patch: Partial<GameSettings>) {
     if (!room || !playerId) return;

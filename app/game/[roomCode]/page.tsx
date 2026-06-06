@@ -852,7 +852,6 @@ export default function GamePage({ params }: { params: Promise<{ roomCode: strin
   usePusherChannel(
     room ? roomChannel(roomCode) : null,
     phaseHandlers,
-    [phase],
     playerId ?? '',
     roomCode
   );
@@ -860,7 +859,6 @@ export default function GamePage({ params }: { params: Promise<{ roomCode: strin
   usePusherChannel(
     room && playerId ? playerChannel(playerId) : null,
     privateHandlers,
-    [],
     playerId ?? '',
     roomCode
   );

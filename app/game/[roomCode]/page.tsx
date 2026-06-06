@@ -721,7 +721,7 @@ export default function GamePage({ params }: { params: Promise<{ roomCode: strin
     if (!pid) { router.replace('/'); return; }
     setPlayerId(pid);
 
-    fetch(`/api/rooms/${roomCode}`)
+    fetch(`/api/rooms/${roomCode}`, { cache: 'no-store' })
       .then(r => r.json())
       .then((data: GameRoom) => {
         if (!data || (data as unknown as { error: string }).error) { router.replace('/'); return; }
@@ -745,7 +745,7 @@ export default function GamePage({ params }: { params: Promise<{ roomCode: strin
   // to private channels during lobby→game navigation. Poll the API instead.
   useEffect(() => {
     if (phase === 'lobby' || phase === 'game-over' || myRole || !playerId || !roomCode) return;
-    fetch(`/api/game/role?roomCode=${roomCode}&playerId=${playerId}`)
+    fetch(`/api/game/role?roomCode=${roomCode}&playerId=${playerId}`, { cache: 'no-store' })
       .then(r => r.json())
       .then(data => {
         if (data.role) {
@@ -756,31 +756,27 @@ export default function GamePage({ params }: { params: Promise<{ roomCode: strin
       .catch(console.error);
   }, [phase, myRole, playerId, roomCode]);
 
-  // Mark that we've entered a real game phase (not just initial 'lobby' state).
+  // Redirect to lobby if the room's server phase is lobby (handles mount checks & Play Again)
   useEffect(() => {
-    if (room && phase !== 'lobby') didEnterGameRef.current = true;
-  }, [room, phase]);
-
-  // When server resets the game (Play Again), phase returns to 'lobby' — navigate back.
-  // Guard: only fire after we've actually been in a game, never on initial mount.
-  useEffect(() => {
-    if (phase !== 'lobby' || !room || !didEnterGameRef.current) return;
-    setMyRole(null);
-    setRoleTeammates([]);
-    setRoleRevealed(false);
-    setCurrentDayResult(null);
-    setCurrentVoteResult(null);
-    setVotes({});
-    setInvestigatorResult(null);
-    setRevealedRoles({});
-    router.replace(`/lobby/${roomCode}`);
-  }, [phase, room, roomCode, router]);
+    if (!room) return;
+    if (room.phase === 'lobby') {
+      setMyRole(null);
+      setRoleTeammates([]);
+      setRoleRevealed(false);
+      setCurrentDayResult(null);
+      setCurrentVoteResult(null);
+      setVotes({});
+      setInvestigatorResult(null);
+      setRevealedRoles({});
+      router.replace(`/lobby/${roomCode}`);
+    }
+  }, [room, roomCode, router]);
 
   // Polling fallback: if Pusher event is missed, sync phase from server every 5s
   useEffect(() => {
     if (!roomCode || !playerId) return;
     const id = setInterval(() => {
-      fetch(`/api/rooms/${roomCode}`)
+      fetch(`/api/rooms/${roomCode}`, { cache: 'no-store' })
         .then(r => r.json())
         .then((data: GameRoom) => {
           if (!data || (data as unknown as { error: string }).error) return;

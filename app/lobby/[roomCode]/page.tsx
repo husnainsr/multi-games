@@ -27,9 +27,18 @@ export default function LobbyPage({ params }: { params: Promise<{ roomCode: stri
     if (!pid) { router.replace('/'); return; }
     setPlayerId(pid);
 
-    fetch(`/api/rooms/${roomCode}`)
+    fetch(`/api/rooms/${roomCode}`, { cache: 'no-store' })
       .then(r => r.json())
-      .then(data => { if (data.error) router.replace('/'); else setRoom(data); })
+      .then(data => {
+        if (data.error) {
+          router.replace('/');
+        } else {
+          setRoom(data);
+          if (data.phase !== 'lobby') {
+            router.replace(`/game/${roomCode}`);
+          }
+        }
+      })
       .catch(() => router.replace('/'));
   }, [roomCode, router]);
 

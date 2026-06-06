@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   return NextResponse.json({
     UPSTASH_REDIS_REST_URL: !!process.env.UPSTASH_REDIS_REST_URL,

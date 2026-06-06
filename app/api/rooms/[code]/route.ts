@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getRoom } from '@/lib/store';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ code: string }> }
@@ -9,7 +11,15 @@ export async function GET(
   const room = await getRoom(code.toUpperCase());
 
   if (!room) {
-    return NextResponse.json({ error: 'Room not found' }, { status: 404 });
+    return NextResponse.json(
+      { error: 'Room not found' },
+      {
+        status: 404,
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        },
+      }
+    );
   }
 
   // Strip private role info before sending, but reveal roles for dead players if settings allow
@@ -27,5 +37,9 @@ export async function GET(
     ),
   };
 
-  return NextResponse.json(publicRoom);
+  return NextResponse.json(publicRoom, {
+    headers: {
+      'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+    },
+  });
 }

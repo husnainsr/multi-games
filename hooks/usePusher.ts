@@ -25,6 +25,14 @@ function getPusher(playerId: string, roomCode: string): PusherClient {
         },
       },
     });
+
+    pusherInstance.connection.bind('state_change', (states: { previous: string; current: string }) => {
+      console.log('[Pusher] Connection state changed:', states.previous, '->', states.current);
+    });
+
+    pusherInstance.connection.bind('error', (err: unknown) => {
+      console.error('[Pusher] Connection error:', err);
+    });
   }
   return pusherInstance;
 }

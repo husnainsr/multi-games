@@ -7,7 +7,7 @@ const geist = Geist({ subsets: ["latin"], variable: "--font-geist-sans" });
 export const metadata: Metadata = {
   title: "Mafia Night — The Social Deduction Game",
   description: "Play Mafia online with your friends. Lies, deception, trust no one.",
-  icons: { icon: "/favicon.ico" },
+  icons: { icon: "/security.png" },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

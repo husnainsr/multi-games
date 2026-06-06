@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { usePusherChannel } from '@/hooks/usePusher';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
+import { GameCard } from '@/components/ui/GameCard';
 import { PUSHER_EVENTS, roomChannel, playerChannel } from '@/lib/pusher';
 import { ROLE_CONFIG, AVATAR_COLORS } from '@/lib/utils';
 import type {
@@ -69,87 +70,7 @@ function TimerBar({ initial, onExpire }: { initial: number; onExpire?: () => voi
   );
 }
 
-function PlayerPill({
-  player, selected, onClick, disabled, badge
-}: {
-  player: { id: string; name: string; avatarIndex: number; isAlive: boolean; isHost: boolean }; selected?: boolean; onClick?: () => void; disabled?: boolean; badge?: string
-}) {
-  const color = AVATAR_COLORS[player.avatarIndex % AVATAR_COLORS.length];
-  const dead = !player.isAlive;
 
-  return (
-    <button
-      onClick={!dead && !disabled ? onClick : undefined}
-      disabled={dead || disabled}
-      className={[
-        'relative flex flex-col items-center gap-2 p-3 rounded-xl border transition-all duration-200',
-        dead ? 'opacity-40 cursor-not-allowed border-gray-800' :
-          disabled ? 'opacity-60 cursor-not-allowed border-gray-800' :
-          'cursor-pointer',
-      ].join(' ')}
-      style={{
-        borderColor: dead || disabled ? undefined : selected ? color : `${color}50`,
-        background: dead || disabled ? 'rgba(17,17,17,0.4)' : selected ? `${color}28` : `${color}12`,
-        boxShadow: selected ? `0 0 18px ${color}35` : undefined,
-      }}
-    >
-      <Avatar name={player.name} avatarIndex={player.avatarIndex} size="md" isAlive={player.isAlive} isHost={player.isHost} />
-      <span className="text-sm font-semibold text-white truncate max-w-full">{player.name}</span>
-      {badge && (
-        <span className="absolute -top-1.5 -right-1.5 min-w-5 h-5 flex items-center justify-center text-xs bg-red-600 text-white px-1.5 rounded-full font-bold">
-          {badge}
-        </span>
-      )}
-      {selected && (
-        <span className="absolute inset-0 rounded-xl border-2 animate-pulse" style={{ borderColor: `${color}90` }} />
-      )}
-    </button>
-  );
-}
-
-// Spectator card used in player status grids — shows role image when dead and revealed
-function PlayerCard({
-  player, revealedRole, isMe,
-}: {
-  player: { id: string; name: string; avatarIndex: number; isAlive: boolean; isHost: boolean };
-  revealedRole?: Role;
-  isMe?: boolean;
-}) {
-  const color = AVATAR_COLORS[player.avatarIndex % AVATAR_COLORS.length];
-  const isDead = !player.isAlive;
-  const roleCfg = revealedRole ? ROLE_CONFIG[revealedRole] : null;
-
-  return (
-    <div
-      className={`rounded-xl overflow-hidden border transition-all ${isDead ? 'border-gray-800/50' : 'border-gray-700/40'}`}
-      style={{
-        background: isDead ? 'rgba(12,12,18,0.9)' : `linear-gradient(145deg, ${color}1a 0%, rgba(12,12,18,0.95) 100%)`,
-        borderColor: isDead ? undefined : `${color}35`,
-      }}
-    >
-      {isDead && revealedRole ? (
-        <div className="relative" style={{ aspectRatio: '3/4' }}>
-          <img src={ROLE_CARD_IMAGES[revealedRole]} alt={roleCfg!.label} className="w-full h-full object-cover opacity-75" />
-          <div className="absolute inset-0 bg-black/30" />
-          <div className="absolute bottom-0 left-0 right-0 py-1 text-center text-xs font-bold" style={{ color: roleCfg!.color, background: 'rgba(0,0,0,0.65)' }}>
-            {roleCfg!.label}
-          </div>
-        </div>
-      ) : (
-        <div className="flex flex-col items-center pt-3 pb-1 gap-1" style={{ filter: isDead ? 'grayscale(70%)' : undefined }}>
-          <Avatar name={player.name} avatarIndex={player.avatarIndex} size="md" isAlive={player.isAlive} isHost={player.isHost} />
-          {isDead && <span className="text-xs text-red-500 mt-0.5">💀</span>}
-        </div>
-      )}
-      <div className="px-2 pb-2 pt-1 text-center">
-        <p className={`text-sm font-semibold truncate ${isDead ? 'text-gray-500' : 'text-white'}`}>
-          {player.name}
-          {isMe && <span className="text-gray-500 text-xs ml-1">(you)</span>}
-        </p>
-      </div>
-    </div>
-  );
-}
 
 const ROLE_CARD_IMAGES: Record<Role, string> = {
   mafia: '/Mafia_Cards.png',
@@ -311,9 +232,6 @@ function NightPhase({
   const [selected, setSelected] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
 
-  const alivePlayers = Object.values(room.players).filter(p => p.isAlive && p.id !== playerId);
-  const allAlivePlayers = Object.values(room.players).filter(p => p.isAlive);
-
   const canAct = role && role !== 'villager' && !submitted;
 
   async function submit(targetId: string | null) {
@@ -336,21 +254,21 @@ function NightPhase({
         )}
       </div>
 
-      <div className="flex-1 flex flex-col items-center justify-center p-6 max-w-2xl mx-auto w-full">
+      <div className="flex-1 flex flex-col items-center justify-center p-6 max-w-4xl mx-auto w-full">
         <AnimatePresence mode="wait">
           {!me?.isAlive ? (
-            <motion.div key="dead" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center">
+            <motion.div key="dead" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-6">
               <p className="text-4xl mb-4">💀</p>
               <p className="text-xl font-bold text-gray-400">You are dead</p>
               <p className="text-gray-600 mt-2">Watch the night unfold...</p>
             </motion.div>
           ) : !role ? (
-            <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center">
+            <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-6">
               <div className="w-8 h-8 border-2 border-red-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
               <p className="text-gray-400">Loading role...</p>
             </motion.div>
           ) : role === 'villager' ? (
-            <motion.div key="villager" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center">
+            <motion.div key="villager" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-6">
               <p className="text-4xl mb-4">😴</p>
               <p className="text-xl font-bold text-gray-300">The village sleeps...</p>
               <p className="text-gray-600 mt-2">Wait for morning to come</p>
@@ -360,51 +278,38 @@ function NightPhase({
               key="action"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="w-full"
+              className="w-full max-w-xl"
             >
-              <div className="glass rounded-2xl p-6 mb-6">
-                <div className="flex items-center gap-3 mb-4">
-                  <span className="text-2xl">
+              <div className="glass rounded-2xl p-6 mb-6 text-center">
+                <div className="flex flex-col items-center gap-3">
+                  <span className="text-4xl">
                     {role === 'mafia' ? '🔪' : role === 'doctor' ? '💉' : '🔍'}
                   </span>
                   <div>
-                    <p className="font-bold text-white" style={{ color: role ? ROLE_CONFIG[role].color : undefined }}>
-                      {role ? ROLE_CONFIG[role].label : ''}
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      {role === 'mafia' ? 'Choose your target to eliminate' :
-                        role === 'doctor' ? 'Choose someone to protect tonight' :
-                          'Choose someone to investigate'}
+                    <h3 className="font-bold text-lg text-white" style={{ color: role ? ROLE_CONFIG[role].color : undefined }}>
+                      {role ? ROLE_CONFIG[role].label : ''} Turn
+                    </h3>
+                    <p className="text-sm text-gray-400 mt-1">
+                      {role === 'mafia' ? 'Choose your target to eliminate from the players grid below' :
+                        role === 'doctor' ? 'Choose someone to protect tonight from the players grid below' :
+                          'Choose someone to investigate from the players grid below'}
                     </p>
                   </div>
                 </div>
 
                 {submitted ? (
-                  <div className="flex items-center gap-2 text-green-400 justify-center py-2">
+                  <div className="flex items-center gap-2 text-green-400 justify-center py-2 mt-4">
                     <span className="text-lg">✓</span>
                     <span className="font-medium">Action submitted</span>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 mb-4">
-                    {(role === 'doctor' ? allAlivePlayers : alivePlayers).map(player => (
-                      <PlayerPill
-                        key={player.id}
-                        player={player}
-                        selected={selected === player.id}
-                        onClick={() => setSelected(prev => prev === player.id ? null : player.id)}
-                      />
-                    ))}
-                  </div>
-                )}
-
-                {!submitted && (
-                  <div className="flex gap-2 mt-2">
+                  <div className="flex justify-center gap-3 mt-6">
                     <Button
                       onClick={() => submit(selected)}
                       disabled={!selected && !!canAct}
-                      className="flex-1"
+                      className="px-6"
                     >
-                      {selected ? `Confirm ${role === 'mafia' ? 'Kill' : role === 'doctor' ? 'Protect' : 'Investigate'}` : 'Select a player'}
+                      {selected ? `Confirm ${role === 'mafia' ? 'Kill' : role === 'doctor' ? 'Protect' : 'Investigate'}` : 'Select a player below'}
                     </Button>
                     <Button variant="ghost" onClick={() => submit(null)}>
                       Skip
@@ -416,18 +321,24 @@ function NightPhase({
           )}
         </AnimatePresence>
 
-        {/* Player status grid */}
+        {/* Unified Player status grid */}
         <div className="w-full mt-4">
           <p className="text-xs text-gray-600 uppercase tracking-widest mb-3">Players</p>
-          <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-            {Object.values(room.players).sort((a, b) => a.joinedAt - b.joinedAt).map(player => (
-              <PlayerCard
-                key={player.id}
-                player={player}
-                revealedRole={revealedRoles[player.id]}
-                isMe={player.id === playerId}
-              />
-            ))}
+          <div className={getGridClass(Object.keys(room.players).length)}>
+            {Object.values(room.players).sort((a, b) => a.joinedAt - b.joinedAt).map(player => {
+              const isTargetable = !!(canAct && player.isAlive && (role === 'doctor' || player.id !== playerId));
+              return (
+                <GameCard
+                  key={player.id}
+                  player={player}
+                  isMe={player.id === playerId}
+                  revealedRole={player.id === playerId ? myRole : (player.role || revealedRoles[player.id])}
+                  isInteractive={isTargetable}
+                  isSelected={selected === player.id}
+                  onClick={isTargetable ? () => setSelected(prev => prev === player.id ? null : player.id) : undefined}
+                />
+              );
+            })}
           </div>
         </div>
       </div>
@@ -524,13 +435,13 @@ function DayPhase({
         {/* Players */}
         <div className="w-full">
           <p className="text-xs text-gray-600 uppercase tracking-widest mb-3">Players</p>
-          <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+          <div className={getGridClass(Object.keys(room.players).length)}>
             {Object.values(room.players).sort((a, b) => a.joinedAt - b.joinedAt).map(player => (
-              <PlayerCard
+              <GameCard
                 key={player.id}
                 player={player}
-                revealedRole={revealedRoles[player.id]}
                 isMe={player.id === playerId}
+                revealedRole={player.id === playerId ? myRole : (player.role || revealedRoles[player.id])}
               />
             ))}
           </div>
@@ -583,14 +494,14 @@ function VotingPhase({
         )}
       </div>
 
-      <div className="flex-1 flex flex-col items-center p-6 max-w-2xl mx-auto w-full gap-4">
+      <div className="flex-1 flex flex-col items-center p-6 max-w-4xl mx-auto w-full gap-4">
         {!me?.isAlive ? (
-          <div className="text-center py-12">
+          <div className="text-center py-6">
             <p className="text-4xl mb-2">👁️</p>
             <p className="text-gray-400">You are eliminated — watching the vote</p>
           </div>
         ) : hasVoted ? (
-          <div className="glass rounded-xl p-4 text-center w-full">
+          <div className="glass rounded-xl p-4 text-center w-full max-w-md">
             <p className="text-green-400 font-semibold">
               ✓ Vote cast for{' '}
               {myVote ? room.players[myVote]?.name : 'Skip'}
@@ -598,50 +509,42 @@ function VotingPhase({
             <p className="text-xs text-gray-500 mt-1">Waiting for others...</p>
           </div>
         ) : (
-          <div className="glass rounded-xl p-4 w-full text-center">
-            <p className="text-sm text-gray-400">Vote to eliminate a player</p>
+          <div className="glass rounded-xl p-4 w-full max-w-md text-center">
+            <p className="text-sm text-gray-400">Vote to eliminate a player from the grid below</p>
           </div>
         )}
 
-        <div className="w-full grid grid-cols-3 sm:grid-cols-4 gap-3">
-          {alivePlayers.map(player => {
-            const count = voteCounts[player.id] || 0;
-            const isLeading = count === maxVotes && count > 0;
-            const mySelection = myVote === player.id;
+        <div className="w-full">
+          <p className="text-xs text-gray-600 uppercase tracking-widest mb-3">Players</p>
+          <div className={getGridClass(Object.keys(room.players).length)}>
+            {Object.values(room.players).sort((a, b) => a.joinedAt - b.joinedAt).map(player => {
+              const count = voteCounts[player.id] || 0;
+              const isLeading = count === maxVotes && count > 0;
+              const mySelection = myVote === player.id;
+              const isTargetable = !!(player.isAlive && !hasVoted && me?.isAlive);
 
-            return (
-              <div key={player.id} className="relative">
-                <PlayerPill
+              return (
+                <GameCard
+                  key={player.id}
                   player={player}
-                  selected={mySelection}
-                  disabled={hasVoted || !me?.isAlive}
-                  onClick={() => submitVote(player.id)}
-                  badge={count > 0 ? String(count) : undefined}
+                  isMe={player.id === playerId}
+                  revealedRole={player.id === playerId ? myRole : (player.role || revealedRoles[player.id])}
+                  isInteractive={isTargetable}
+                  isSelected={mySelection}
+                  disabled={!isTargetable}
+                  onClick={isTargetable ? () => submitVote(player.id) : undefined}
+                  voteCount={count}
+                  isLeading={isLeading}
                 />
-                {isLeading && count > 0 && (
-                  <div className="absolute -bottom-1 left-0 right-0 h-0.5 bg-red-500 rounded-full" />
-                )}
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
 
         {me?.isAlive && !hasVoted && (
-          <Button variant="ghost" onClick={() => submitVote(null)} className="text-gray-500 hover:text-gray-300">
+          <Button variant="ghost" onClick={() => submitVote(null)} className="text-gray-500 hover:text-gray-300 mt-2">
             Skip Vote ({skipCount} skipped)
           </Button>
-        )}
-
-        {/* Dead players — greyed out with role revealed */}
-        {Object.values(room.players).some(p => !p.isAlive) && (
-          <div className="w-full pt-2 border-t border-gray-800/50">
-            <p className="text-xs text-gray-700 uppercase tracking-widest mb-2">Eliminated</p>
-            <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
-              {Object.values(room.players).filter(p => !p.isAlive).sort((a, b) => a.joinedAt - b.joinedAt).map(player => (
-                <PlayerCard key={player.id} player={player} revealedRole={revealedRoles[player.id]} isMe={player.id === playerId} />
-              ))}
-            </div>
-          </div>
         )}
       </div>
     </div>
@@ -719,8 +622,8 @@ function VoteResultScreen({
 }
 
 function GameOverScreen({
-  room, winner, onPlayAgain
-}: { room: GameRoom; winner: 'mafia' | 'village'; onPlayAgain: () => void }) {
+  room, winner, isHost, onPlayAgain
+}: { room: GameRoom; winner: 'mafia' | 'village'; isHost: boolean; onPlayAgain: () => void }) {
   const isVillageWin = winner === 'village';
 
   return (
@@ -778,9 +681,17 @@ function GameOverScreen({
           </div>
         </div>
 
-        <Button size="lg" onClick={onPlayAgain} className="w-full">
-          🔄 Play Again
-        </Button>
+        {isHost ? (
+          <Button size="lg" onClick={onPlayAgain} className="w-full">
+            🔄 Play Again
+          </Button>
+        ) : (
+          <div className="p-4 rounded-xl bg-gray-900/50 border border-gray-800 text-center">
+            <p className="text-sm text-gray-500">
+              Waiting for Host to start a new game...
+            </p>
+          </div>
+        )}
       </motion.div>
     </div>
   );
@@ -1062,10 +973,18 @@ export default function GamePage({ params }: { params: Promise<{ roomCode: strin
           <GameOverScreen
             room={room}
             winner={room.winner}
+            isHost={room.hostId === playerId}
             onPlayAgain={() => advance('game-over')}
           />
         )}
       </motion.div>
     </AnimatePresence>
   );
+}
+
+function getGridClass(count: number) {
+  if (count <= 2) return "grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-md mx-auto w-full";
+  if (count <= 4) return "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-6 max-w-3xl mx-auto w-full";
+  if (count <= 6) return "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 max-w-5xl mx-auto w-full";
+  return "grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-4 w-full";
 }

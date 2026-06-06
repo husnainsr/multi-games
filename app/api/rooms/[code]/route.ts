@@ -12,13 +12,16 @@ export async function GET(
     return NextResponse.json({ error: 'Room not found' }, { status: 404 });
   }
 
-  // Strip private role info before sending
+  // Strip private role info before sending, but reveal roles for dead players if settings allow
   const publicRoom = {
     ...room,
     players: Object.fromEntries(
       Object.entries(room.players).map(([id, p]) => {
         const pub = { ...p };
-        if (room.phase !== 'game-over') delete (pub as Record<string, unknown>).role;
+        const shouldReveal = room.phase === 'game-over' || (room.settings.revealRoleOnDeath && !p.isAlive);
+        if (!shouldReveal) {
+          delete (pub as Record<string, unknown>).role;
+        }
         return [id, pub];
       })
     ),

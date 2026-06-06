@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { usePusherChannel } from '@/hooks/usePusher';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
+import { GameCard } from '@/components/ui/GameCard';
 import { Toggle } from '@/components/ui/Toggle';
 import { PUSHER_EVENTS, roomChannel } from '@/lib/pusher';
 import { getMinPlayers } from '@/lib/game-engine';
@@ -175,40 +176,23 @@ export default function LobbyPage({ params }: { params: Promise<{ roomCode: stri
             )}
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className={getGridClass(players.length)}>
             <AnimatePresence>
               {players.sort((a, b) => a.joinedAt - b.joinedAt).map(player => (
                 <motion.div
                   key={player.id}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: 20 }}
-                  className="glass rounded-xl p-4 flex items-center gap-3"
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.8 }}
+                  transition={{ duration: 0.3 }}
                 >
-                  <Avatar
-                    name={player.name}
-                    avatarIndex={player.avatarIndex}
-                    size="md"
-                    isHost={player.isHost}
+                  <GameCard
+                    player={player}
+                    isMe={player.id === playerId}
+                    isLobby={true}
+                    showKickButton={isHost && player.id !== playerId}
+                    onKick={() => kickPlayer(player.id)}
                   />
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-white truncate">{player.name}</p>
-                    <p className="text-xs text-gray-500">
-                      {player.id === playerId ? 'You' : player.isHost ? 'Host' : 'Player'}
-                    </p>
-                  </div>
-                  {player.isHost && (
-                    <Crown className="w-4 h-4 text-amber-400 flex-shrink-0" />
-                  )}
-                  {isHost && player.id !== playerId && (
-                    <button
-                      onClick={() => kickPlayer(player.id)}
-                      className="ml-auto p-1 rounded-md text-gray-600 hover:text-red-400 hover:bg-red-500/10 transition-colors flex-shrink-0"
-                      title="Kick player"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  )}
                 </motion.div>
               ))}
             </AnimatePresence>
@@ -340,4 +324,11 @@ export default function LobbyPage({ params }: { params: Promise<{ roomCode: stri
       </div>
     </div>
   );
+}
+
+function getGridClass(count: number) {
+  if (count <= 2) return "grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-md mx-auto w-full";
+  if (count <= 4) return "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-6 max-w-3xl mx-auto w-full";
+  if (count <= 6) return "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 max-w-5xl mx-auto w-full";
+  return "grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-4 w-full";
 }

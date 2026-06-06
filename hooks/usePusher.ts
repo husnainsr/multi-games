@@ -4,9 +4,16 @@ import PusherClient from 'pusher-js';
 import type { Channel } from 'pusher-js';
 
 let pusherInstance: PusherClient | null = null;
+let currentRoomCode: string | null = null;
+let currentPlayerId: string | null = null;
 
 function getPusher(playerId: string, roomCode: string): PusherClient {
-  if (!pusherInstance) {
+  if (!pusherInstance || currentRoomCode !== roomCode || currentPlayerId !== playerId) {
+    if (pusherInstance) {
+      pusherInstance.disconnect();
+    }
+    currentRoomCode = roomCode;
+    currentPlayerId = playerId;
     pusherInstance = new PusherClient(process.env.NEXT_PUBLIC_PUSHER_KEY!, {
       cluster: process.env.NEXT_PUBLIC_PUSHER_CLUSTER!,
       channelAuthorization: {

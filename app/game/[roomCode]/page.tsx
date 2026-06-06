@@ -32,9 +32,32 @@ function useTimer(duration: number, onExpire: () => void, active: boolean) {
   return remaining;
 }
 
-function TimerBar({ remaining, total }: { remaining: number; total: number }) {
-  if (total === 0) return null;
-  const pct = (remaining / total) * 100;
+function TimerBar({ initial, onExpire }: { initial: number; onExpire?: () => void }) {
+  const [remaining, setRemaining] = useState(initial);
+  const onExpireRef = useRef(onExpire);
+  onExpireRef.current = onExpire;
+
+  useEffect(() => {
+    setRemaining(initial);
+  }, [initial]);
+
+  useEffect(() => {
+    if (initial === 0) return;
+    const id = setInterval(() => {
+      setRemaining(prev => {
+        if (prev <= 1) {
+          clearInterval(id);
+          onExpireRef.current?.();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(id);
+  }, [initial]);
+
+  if (initial === 0) return null;
+  const pct = (remaining / initial) * 100;
   const color = pct > 50 ? '#22c55e' : pct > 25 ? '#f59e0b' : '#ef4444';
   return (
     <div className="flex items-center gap-3 mb-4">
@@ -60,100 +83,231 @@ function PlayerPill({
       disabled={dead || disabled}
       className={[
         'relative flex flex-col items-center gap-2 p-3 rounded-xl border transition-all duration-200',
-        dead ? 'opacity-40 cursor-not-allowed border-gray-800 bg-gray-900/20' :
-          selected ? 'border-red-500 bg-red-950/30 shadow-lg shadow-red-900/20' :
-            'border-gray-700 bg-gray-900/40 hover:border-gray-600 hover:bg-gray-800/40',
-        !dead && !disabled && !selected ? 'cursor-pointer' : ''
+        dead ? 'opacity-40 cursor-not-allowed border-gray-800' :
+          disabled ? 'opacity-60 cursor-not-allowed border-gray-800' :
+          'cursor-pointer',
       ].join(' ')}
+      style={{
+        borderColor: dead || disabled ? undefined : selected ? color : `${color}50`,
+        background: dead || disabled ? 'rgba(17,17,17,0.4)' : selected ? `${color}28` : `${color}12`,
+        boxShadow: selected ? `0 0 18px ${color}35` : undefined,
+      }}
     >
       <Avatar name={player.name} avatarIndex={player.avatarIndex} size="md" isAlive={player.isAlive} isHost={player.isHost} />
-      <span className="text-xs font-medium text-gray-300 truncate max-w-full">{player.name}</span>
+      <span className="text-sm font-semibold text-white truncate max-w-full">{player.name}</span>
       {badge && (
-        <span className="absolute -top-1.5 -right-1.5 text-xs bg-red-600 text-white px-1.5 py-0.5 rounded-full font-bold">
+        <span className="absolute -top-1.5 -right-1.5 min-w-5 h-5 flex items-center justify-center text-xs bg-red-600 text-white px-1.5 rounded-full font-bold">
           {badge}
         </span>
       )}
       {selected && (
-        <span className="absolute inset-0 rounded-xl border-2 border-red-500/50 animate-pulse" />
+        <span className="absolute inset-0 rounded-xl border-2 animate-pulse" style={{ borderColor: `${color}90` }} />
       )}
     </button>
   );
 }
 
+// Spectator card used in player status grids — shows role image when dead and revealed
+function PlayerCard({
+  player, revealedRole, isMe,
+}: {
+  player: { id: string; name: string; avatarIndex: number; isAlive: boolean; isHost: boolean };
+  revealedRole?: Role;
+  isMe?: boolean;
+}) {
+  const color = AVATAR_COLORS[player.avatarIndex % AVATAR_COLORS.length];
+  const isDead = !player.isAlive;
+  const roleCfg = revealedRole ? ROLE_CONFIG[revealedRole] : null;
+
+  return (
+    <div
+      className={`rounded-xl overflow-hidden border transition-all ${isDead ? 'border-gray-800/50' : 'border-gray-700/40'}`}
+      style={{
+        background: isDead ? 'rgba(12,12,18,0.9)' : `linear-gradient(145deg, ${color}1a 0%, rgba(12,12,18,0.95) 100%)`,
+        borderColor: isDead ? undefined : `${color}35`,
+      }}
+    >
+      {isDead && revealedRole ? (
+        <div className="relative" style={{ aspectRatio: '3/4' }}>
+          <img src={ROLE_CARD_IMAGES[revealedRole]} alt={roleCfg!.label} className="w-full h-full object-cover opacity-75" />
+          <div className="absolute inset-0 bg-black/30" />
+          <div className="absolute bottom-0 left-0 right-0 py-1 text-center text-xs font-bold" style={{ color: roleCfg!.color, background: 'rgba(0,0,0,0.65)' }}>
+            {roleCfg!.label}
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-col items-center pt-3 pb-1 gap-1" style={{ filter: isDead ? 'grayscale(70%)' : undefined }}>
+          <Avatar name={player.name} avatarIndex={player.avatarIndex} size="md" isAlive={player.isAlive} isHost={player.isHost} />
+          {isDead && <span className="text-xs text-red-500 mt-0.5">💀</span>}
+        </div>
+      )}
+      <div className="px-2 pb-2 pt-1 text-center">
+        <p className={`text-sm font-semibold truncate ${isDead ? 'text-gray-500' : 'text-white'}`}>
+          {player.name}
+          {isMe && <span className="text-gray-500 text-xs ml-1">(you)</span>}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+const ROLE_CARD_IMAGES: Record<Role, string> = {
+  mafia: '/Mafia_Cards.png',
+  doctor: '/Doctor_Cards.png',
+  investigator: '/Detective_Cards.png',
+  villager: '/Civilian.png',
+};
+
 function RoleReveal({
   role, teammates, onReady
 }: { role: Role; teammates: PublicPlayer[]; onReady: () => void }) {
   const cfg = ROLE_CONFIG[role];
-  const [revealed, setRevealed] = useState(false);
+  const [isFlipped, setIsFlipped] = useState(false);
+  const [showInfo, setShowInfo] = useState(false);
+  const [countdown, setCountdown] = useState(20);
+  const [readyClicked, setReadyClicked] = useState(false);
+  const onReadyRef = useRef(onReady);
+  onReadyRef.current = onReady;
 
   useEffect(() => {
-    const t = setTimeout(() => setRevealed(true), 600);
-    return () => clearTimeout(t);
+    const t1 = setTimeout(() => setIsFlipped(true), 1200);
+    const t2 = setTimeout(() => setShowInfo(true), 2200);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
   }, []);
 
+  // Auto-advance countdown starts once info is visible
+  useEffect(() => {
+    if (!showInfo) return;
+    const interval = setInterval(() => {
+      setCountdown(prev => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          onReadyRef.current();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [showInfo]);
+
+  function handleReady() {
+    if (readyClicked) return;
+    setReadyClicked(true);
+    onReadyRef.current();
+  }
+
   return (
-    <div className="min-h-screen bg-[#0a0a0f] flex flex-col items-center justify-center p-6">
-      <div className="absolute inset-0" style={{ background: `radial-gradient(ellipse at center, ${cfg.bg}44 0%, transparent 60%)` }} />
+    <div className="min-h-screen bg-[#0a0a0f] flex flex-col items-center justify-center p-6 overflow-hidden">
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{ background: `radial-gradient(ellipse at center, ${cfg.bg}55 0%, transparent 65%)` }}
+      />
 
-      <motion.div
-        initial={{ scale: 0.8, opacity: 0, rotateY: -90 }}
-        animate={{ scale: 1, opacity: 1, rotateY: 0 }}
-        transition={{ duration: 0.6, type: 'spring' }}
-        className="relative z-10 flex flex-col items-center text-center max-w-sm w-full"
+      <motion.p
+        initial={{ opacity: 0, y: -16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.3 }}
+        className="relative z-10 text-sm text-gray-500 uppercase tracking-widest mb-8"
       >
-        <p className="text-sm text-gray-500 uppercase tracking-widest mb-6">Your Role</p>
+        Your Role Has Been Assigned
+      </motion.p>
 
-        <div
-          className="w-48 h-64 rounded-2xl border-2 flex flex-col items-center justify-center gap-4 mb-8"
-          style={{ borderColor: cfg.color + '60', background: cfg.bg + 'aa', boxShadow: `0 0 40px ${cfg.color}30` }}
+      {/* 3D Card flip */}
+      <div className="relative z-10 mb-8" style={{ perspective: '1200px' }}>
+        <motion.div
+          animate={{ rotateY: isFlipped ? 180 : 0 }}
+          transition={{ duration: 0.9, ease: [0.4, 0, 0.2, 1] }}
+          style={{ transformStyle: 'preserve-3d', width: 220, height: 320 }}
         >
-          <span className="text-6xl">
-            {role === 'mafia' ? '🔪' : role === 'doctor' ? '💉' : role === 'investigator' ? '🔍' : '🧑'}
-          </span>
-          <span className="text-2xl font-black uppercase tracking-wide" style={{ color: cfg.color }}>
-            {cfg.label}
-          </span>
-        </div>
+          {/* Back face */}
+          <div
+            className="absolute inset-0 rounded-2xl overflow-hidden shadow-2xl"
+            style={{ backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}
+          >
+            <img
+              src="/backside_card.png"
+              alt="Card back"
+              className="w-full h-full object-cover"
+            />
+          </div>
 
-        <AnimatePresence>
-          {revealed && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="flex flex-col items-center gap-4 w-full"
-            >
+          {/* Front face */}
+          <div
+            className="absolute inset-0 rounded-2xl overflow-hidden shadow-2xl"
+            style={{
+              backfaceVisibility: 'hidden',
+              WebkitBackfaceVisibility: 'hidden',
+              transform: 'rotateY(180deg)',
+              boxShadow: `0 0 40px ${cfg.color}50`,
+            }}
+          >
+            <img
+              src={ROLE_CARD_IMAGES[role]}
+              alt={cfg.label}
+              className="w-full h-full object-cover"
+            />
+          </div>
+        </motion.div>
+      </div>
+
+      {/* Info revealed after flip */}
+      <AnimatePresence>
+        {showInfo && (
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="relative z-10 flex flex-col items-center gap-4 w-full max-w-sm text-center"
+          >
+            <div>
+              <h2 className="text-3xl font-black uppercase tracking-widest mb-1" style={{ color: cfg.color }}>
+                {cfg.label}
+              </h2>
               <p className="text-gray-400 text-sm leading-relaxed">{cfg.description}</p>
+            </div>
 
-              {role === 'mafia' && teammates.length > 0 && (
-                <div className="glass rounded-xl p-4 w-full mt-2">
-                  <p className="text-xs text-gray-500 uppercase tracking-widest mb-3 text-center">Your team</p>
-                  <div className="flex justify-center gap-3">
-                    {teammates.map(t => (
-                      <div key={t.id} className="flex flex-col items-center gap-1">
-                        <Avatar name={t.name} avatarIndex={t.avatarIndex} size="sm" />
-                        <span className="text-xs text-gray-400">{t.name}</span>
-                      </div>
-                    ))}
-                  </div>
+            {role === 'mafia' && teammates.length > 0 && (
+              <div className="glass rounded-xl p-4 w-full glow-red">
+                <p className="text-xs text-gray-500 uppercase tracking-widest mb-3 text-center">Your team</p>
+                <div className="flex justify-center gap-4">
+                  {teammates.map(t => (
+                    <div key={t.id} className="flex flex-col items-center gap-1.5">
+                      <Avatar name={t.name} avatarIndex={t.avatarIndex} size="md" />
+                      <span className="text-xs text-gray-300 font-medium">{t.name}</span>
+                    </div>
+                  ))}
                 </div>
-              )}
+              </div>
+            )}
 
-              <Button onClick={onReady} size="lg" className="mt-4 w-full">
-                I&apos;m Ready
-              </Button>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </motion.div>
+            {!readyClicked ? (
+              <div className="w-full flex flex-col items-center gap-2 mt-2">
+                <Button onClick={handleReady} size="lg" className="w-full">
+                  I&apos;m Ready — Let&apos;s Play
+                </Button>
+                <p className="text-xs text-gray-600">
+                  Auto-starting in <span className="text-gray-400 font-mono">{countdown}s</span>
+                </p>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-green-400 mt-2">
+                <span>✓</span>
+                <span className="text-sm font-medium">Ready! Waiting for game to start...</span>
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
 
 function NightPhase({
-  room, playerId, onAction
-}: { room: GameRoom; playerId: string; onAction: (targetId: string | null) => void }) {
+  room, playerId, myRole, revealedRoles, onAction, onAdvance
+}: { room: GameRoom; playerId: string; myRole: Role | null; revealedRoles: Record<string, Role>; onAction: (targetId: string | null) => void; onAdvance: () => void }) {
   const me = room.players[playerId];
-  const role = me?.role;
+  const role = myRole;
   const [selected, setSelected] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
 
@@ -176,8 +330,8 @@ function NightPhase({
         </div>
         {room.settings.nightDuration > 0 && (
           <TimerBar
-            remaining={room.settings.nightDuration}
-            total={room.settings.nightDuration}
+            initial={room.settings.nightDuration}
+            onExpire={onAdvance}
           />
         )}
       </div>
@@ -189,6 +343,11 @@ function NightPhase({
               <p className="text-4xl mb-4">💀</p>
               <p className="text-xl font-bold text-gray-400">You are dead</p>
               <p className="text-gray-600 mt-2">Watch the night unfold...</p>
+            </motion.div>
+          ) : !role ? (
+            <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center">
+              <div className="w-8 h-8 border-2 border-red-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+              <p className="text-gray-400">Loading role...</p>
             </motion.div>
           ) : role === 'villager' ? (
             <motion.div key="villager" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center">
@@ -260,17 +419,14 @@ function NightPhase({
         {/* Player status grid */}
         <div className="w-full mt-4">
           <p className="text-xs text-gray-600 uppercase tracking-widest mb-3">Players</p>
-          <div className="flex flex-wrap gap-2">
+          <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
             {Object.values(room.players).sort((a, b) => a.joinedAt - b.joinedAt).map(player => (
-              <div
+              <PlayerCard
                 key={player.id}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gray-900/50"
-                style={{ opacity: player.isAlive ? 1 : 0.4 }}
-              >
-                <Avatar name={player.name} avatarIndex={player.avatarIndex} size="sm" isAlive={player.isAlive} />
-                <span className="text-xs text-gray-400">{player.name}</span>
-                {player.id === playerId && <span className="text-xs text-gray-600">(you)</span>}
-              </div>
+                player={player}
+                revealedRole={revealedRoles[player.id]}
+                isMe={player.id === playerId}
+              />
             ))}
           </div>
         </div>
@@ -280,14 +436,13 @@ function NightPhase({
 }
 
 function DayPhase({
-  room, playerId, dayResult, onAdvance, investigatorResult
+  room, playerId, myRole, revealedRoles, dayResult, onAdvance, investigatorResult
 }: {
-  room: GameRoom; playerId: string; dayResult: DayResult | null;
-  onAdvance: () => void; investigatorResult: PusherInvestigatorResult | null;
+  room: GameRoom; playerId: string; myRole: Role | null; revealedRoles: Record<string, Role>;
+  dayResult: DayResult | null; onAdvance: () => void; investigatorResult: PusherInvestigatorResult | null;
 }) {
   const isHost = room.hostId === playerId;
-  const me = room.players[playerId];
-  const isInvestigator = me?.role === 'investigator';
+  const isInvestigator = myRole === 'investigator';
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] flex flex-col" style={{ background: 'radial-gradient(ellipse at top, #1a1008 0%, #0a0a0f 70%)' }}>
@@ -371,19 +526,12 @@ function DayPhase({
           <p className="text-xs text-gray-600 uppercase tracking-widest mb-3">Players</p>
           <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
             {Object.values(room.players).sort((a, b) => a.joinedAt - b.joinedAt).map(player => (
-              <div
+              <PlayerCard
                 key={player.id}
-                className="glass rounded-xl p-3 flex flex-col items-center gap-2 text-center"
-                style={{ opacity: player.isAlive ? 1 : 0.5 }}
-              >
-                <Avatar name={player.name} avatarIndex={player.avatarIndex} size="md" isAlive={player.isAlive} isHost={player.isHost} />
-                <span className="text-xs font-medium text-gray-300 truncate w-full">{player.name}</span>
-                {!player.isAlive && player.role && (
-                  <span className="text-xs" style={{ color: ROLE_CONFIG[player.role].color }}>
-                    {ROLE_CONFIG[player.role].label}
-                  </span>
-                )}
-              </div>
+                player={player}
+                revealedRole={revealedRoles[player.id]}
+                isMe={player.id === playerId}
+              />
             ))}
           </div>
         </div>
@@ -402,9 +550,10 @@ function DayPhase({
 }
 
 function VotingPhase({
-  room, playerId, votes, onVote
-}: { room: GameRoom; playerId: string; votes: Record<string, string | null>; onVote: (targetId: string | null) => void }) {
+  room, playerId, myRole, revealedRoles, votes, onVote, onAdvance
+}: { room: GameRoom; playerId: string; myRole: Role | null; revealedRoles: Record<string, Role>; votes: Record<string, string | null>; onVote: (targetId: string | null) => void; onAdvance: () => void }) {
   const me = room.players[playerId];
+  void myRole; // available for future role-specific voting UI
   const [myVote, setMyVote] = useState<string | null | undefined>(undefined);
   const hasVoted = playerId in votes;
   const alivePlayers = Object.values(room.players).filter(p => p.isAlive);
@@ -430,7 +579,7 @@ function VotingPhase({
           <span className="text-sm text-gray-500">{Object.keys(votes).length}/{alivePlayers.length} voted</span>
         </div>
         {room.settings.voteDuration > 0 && (
-          <TimerBar remaining={room.settings.voteDuration} total={room.settings.voteDuration} />
+          <TimerBar initial={room.settings.voteDuration} onExpire={onAdvance} />
         )}
       </div>
 
@@ -481,6 +630,18 @@ function VotingPhase({
           <Button variant="ghost" onClick={() => submitVote(null)} className="text-gray-500 hover:text-gray-300">
             Skip Vote ({skipCount} skipped)
           </Button>
+        )}
+
+        {/* Dead players — greyed out with role revealed */}
+        {Object.values(room.players).some(p => !p.isAlive) && (
+          <div className="w-full pt-2 border-t border-gray-800/50">
+            <p className="text-xs text-gray-700 uppercase tracking-widest mb-2">Eliminated</p>
+            <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
+              {Object.values(room.players).filter(p => !p.isAlive).sort((a, b) => a.joinedAt - b.joinedAt).map(player => (
+                <PlayerCard key={player.id} player={player} revealedRole={revealedRoles[player.id]} isMe={player.id === playerId} />
+              ))}
+            </div>
+          </div>
         )}
       </div>
     </div>
@@ -639,6 +800,10 @@ export default function GamePage({ params }: { params: Promise<{ roomCode: strin
   const [currentVoteResult, setCurrentVoteResult] = useState<VoteResult | null>(null);
   const [votes, setVotes] = useState<Record<string, string | null>>({});
   const [investigatorResult, setInvestigatorResult] = useState<PusherInvestigatorResult | null>(null);
+  const [revealedRoles, setRevealedRoles] = useState<Record<string, Role>>({});
+  // Only redirect to lobby after we've been in an active game phase — prevents
+  // false fires when phase='lobby' is just the React initial state on fresh mount.
+  const didEnterGameRef = useRef(false);
 
   useEffect(() => {
     const pid = localStorage.getItem(`player:${roomCode}`);
@@ -654,9 +819,74 @@ export default function GamePage({ params }: { params: Promise<{ roomCode: strin
         setVotes(data.votes || {});
         if (data.lastDayResult) setCurrentDayResult(data.lastDayResult);
         if (data.lastVoteResult) setCurrentVoteResult(data.lastVoteResult);
+        // Seed revealed roles from the latest results available on load
+        const seed: Record<string, Role> = {};
+        if (data.lastDayResult?.eliminatedPlayerId && data.lastDayResult.eliminatedPlayerRole)
+          seed[data.lastDayResult.eliminatedPlayerId] = data.lastDayResult.eliminatedPlayerRole;
+        if (data.lastVoteResult?.eliminatedPlayerId && data.lastVoteResult.eliminatedPlayerRole)
+          seed[data.lastVoteResult.eliminatedPlayerId] = data.lastVoteResult.eliminatedPlayerRole;
+        if (Object.keys(seed).length) setRevealedRoles(seed);
       })
       .catch(() => router.replace('/'));
   }, [roomCode, router]);
+
+  // Fix Pusher race condition: role-assigned events fire before clients subscribe
+  // to private channels during lobby→game navigation. Poll the API instead.
+  useEffect(() => {
+    if (phase === 'lobby' || phase === 'game-over' || myRole || !playerId || !roomCode) return;
+    fetch(`/api/game/role?roomCode=${roomCode}&playerId=${playerId}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.role) {
+          setMyRole(data.role);
+          setRoleTeammates(data.teammates || []);
+        }
+      })
+      .catch(console.error);
+  }, [phase, myRole, playerId, roomCode]);
+
+  // Mark that we've entered a real game phase (not just initial 'lobby' state).
+  useEffect(() => {
+    if (room && phase !== 'lobby') didEnterGameRef.current = true;
+  }, [room, phase]);
+
+  // When server resets the game (Play Again), phase returns to 'lobby' — navigate back.
+  // Guard: only fire after we've actually been in a game, never on initial mount.
+  useEffect(() => {
+    if (phase !== 'lobby' || !room || !didEnterGameRef.current) return;
+    setMyRole(null);
+    setRoleTeammates([]);
+    setRoleRevealed(false);
+    setCurrentDayResult(null);
+    setCurrentVoteResult(null);
+    setVotes({});
+    setInvestigatorResult(null);
+    setRevealedRoles({});
+    router.replace(`/lobby/${roomCode}`);
+  }, [phase, room, roomCode, router]);
+
+  // Polling fallback: if Pusher event is missed, sync phase from server every 5s
+  useEffect(() => {
+    if (!roomCode || !playerId) return;
+    const id = setInterval(() => {
+      fetch(`/api/rooms/${roomCode}`)
+        .then(r => r.json())
+        .then((data: GameRoom) => {
+          if (!data || (data as unknown as { error: string }).error) return;
+          setPhase(prev => {
+            if (prev !== data.phase) {
+              setRoom(data);
+              setVotes(data.votes || {});
+              if (data.lastDayResult) setCurrentDayResult(data.lastDayResult);
+              if (data.lastVoteResult) setCurrentVoteResult(data.lastVoteResult);
+            }
+            return data.phase;
+          });
+        })
+        .catch(() => {});
+    }, 5000);
+    return () => clearInterval(id);
+  }, [roomCode, playerId]);
 
   const phaseHandlers = {
     [PUSHER_EVENTS.PHASE_CHANGED]: useCallback((data: unknown) => {
@@ -673,8 +903,18 @@ export default function GamePage({ params }: { params: Promise<{ roomCode: strin
         return updated;
       });
 
-      if (payload.dayResult) { setCurrentDayResult(payload.dayResult); setCurrentVoteResult(null); }
-      if (payload.voteResult) { setCurrentVoteResult(payload.voteResult); setCurrentDayResult(null); }
+      if (payload.dayResult) {
+        setCurrentDayResult(payload.dayResult);
+        setCurrentVoteResult(null);
+        if (payload.dayResult.eliminatedPlayerId && payload.dayResult.eliminatedPlayerRole)
+          setRevealedRoles(prev => ({ ...prev, [payload.dayResult!.eliminatedPlayerId!]: payload.dayResult!.eliminatedPlayerRole! }));
+      }
+      if (payload.voteResult) {
+        setCurrentVoteResult(payload.voteResult);
+        setCurrentDayResult(null);
+        if (payload.voteResult.eliminatedPlayerId && payload.voteResult.eliminatedPlayerRole)
+          setRevealedRoles(prev => ({ ...prev, [payload.voteResult!.eliminatedPlayerId!]: payload.voteResult!.eliminatedPlayerRole! }));
+      }
       if (payload.phase === 'night') setVotes({});
       if (payload.phase === 'voting') setVotes({});
     }, []),
@@ -783,13 +1023,15 @@ export default function GamePage({ params }: { params: Promise<{ roomCode: strin
         )}
 
         {phase === 'night' && (
-          <NightPhase room={room} playerId={playerId} onAction={sendAction} />
+          <NightPhase room={room} playerId={playerId} myRole={myRole} revealedRoles={revealedRoles} onAction={sendAction} onAdvance={() => advance('night')} />
         )}
 
         {phase === 'day' && (
           <DayPhase
             room={room}
             playerId={playerId}
+            myRole={myRole}
+            revealedRoles={revealedRoles}
             dayResult={currentDayResult}
             onAdvance={() => advance('day')}
             investigatorResult={investigatorResult}
@@ -800,8 +1042,11 @@ export default function GamePage({ params }: { params: Promise<{ roomCode: strin
           <VotingPhase
             room={room}
             playerId={playerId}
+            myRole={myRole}
+            revealedRoles={revealedRoles}
             votes={votes}
             onVote={sendVote}
+            onAdvance={() => advance('voting')}
           />
         )}
 

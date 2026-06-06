@@ -5,6 +5,14 @@ import { assignRoles, getMinPlayers, EMPTY_NIGHT_ACTIONS } from '@/lib/game-engi
 import { AVATAR_COLORS } from '@/lib/utils';
 import type { PublicPlayer } from '@/lib/types';
 
+async function safeTrigger(channel: string, event: string, data: unknown) {
+  try {
+    await pusherServer.trigger(channel, event, data);
+  } catch (e) {
+    console.error('[Pusher] trigger failed:', (e as Error).message);
+  }
+}
+
 export async function POST(req: NextRequest) {
   const { roomCode, playerId } = await req.json();
 
@@ -20,19 +28,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `Need at least ${minPlayers} players` }, { status: 400 });
   }
 
-  // Assign avatars by join order
-  const sortedPlayerIds = playerIds.sort(
-    (a, b) => room.players[a].joinedAt - room.players[b].joinedAt
-  );
-  sortedPlayerIds.forEach((id, i) => {
-    room.players[id].avatarIndex = i % AVATAR_COLORS.length;
-  });
+  const sortedPlayerIds = playerIds.sort((a, b) => room.players[a].joinedAt - room.players[b].joinedAt);
+  sortedPlayerIds.forEach((id, i) => { room.players[id].avatarIndex = i % AVATAR_COLORS.length; });
 
-  // Assign roles
   const roles = assignRoles(playerIds, room.settings);
-  Object.entries(roles).forEach(([id, role]) => {
-    room.players[id].role = role;
-  });
+  Object.entries(roles).forEach(([id, role]) => { room.players[id].role = role; });
 
   room.phase = 'starting';
   room.round = 1;
@@ -44,32 +44,20 @@ export async function POST(req: NextRequest) {
 
   await setRoom(room);
 
-  // Broadcast game started
-  await pusherServer.trigger(roomChannel(roomCode), PUSHER_EVENTS.PHASE_CHANGED, {
-    phase: 'starting',
-    round: 1,
-  });
+  await safeTrigger(roomChannel(roomCode), PUSHER_EVENTS.PHASE_CHANGED, { phase: 'starting', round: 1 });
 
-  // Send each player their role privately
   const mafiaPlayers: PublicPlayer[] = Object.values(room.players)
     .filter(p => p.role === 'mafia')
-    .map(p => ({
-      id: p.id,
-      name: p.name,
-      avatarIndex: p.avatarIndex,
-      isAlive: p.isAlive,
-      isHost: p.isHost,
-      joinedAt: p.joinedAt,
-    }));
+    .map(p => ({ id: p.id, name: p.name, avatarIndex: p.avatarIndex, isAlive: p.isAlive, isHost: p.isHost, joinedAt: p.joinedAt }));
 
-  const roleEvents = Object.values(room.players).map(player =>
-    pusherServer.trigger(playerChannel(player.id), PUSHER_EVENTS.ROLE_ASSIGNED, {
-      role: player.role,
-      teammates: player.role === 'mafia' ? mafiaPlayers.filter(m => m.id !== player.id) : [],
-    })
+  await Promise.all(
+    Object.values(room.players).map(player =>
+      safeTrigger(playerChannel(player.id), PUSHER_EVENTS.ROLE_ASSIGNED, {
+        role: player.role,
+        teammates: player.role === 'mafia' ? mafiaPlayers.filter(m => m.id !== player.id) : [],
+      })
+    )
   );
-
-  await Promise.all(roleEvents);
 
   return NextResponse.json({ ok: true });
 }

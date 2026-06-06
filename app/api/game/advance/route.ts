@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getRoom, setRoom } from '@/lib/store';
-import { pusherServer, roomChannel, playerChannel, PUSHER_EVENTS } from '@/lib/pusher';
+import { safeTrigger, roomChannel, playerChannel, PUSHER_EVENTS } from '@/lib/pusher';
 import {
   processNightActions,
   processVotes,
@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
       room.phase = 'night';
       room.nightActions = { ...EMPTY_NIGHT_ACTIONS };
       await setRoom(room);
-      await pusherServer.trigger(roomChannel(roomCode), PUSHER_EVENTS.PHASE_CHANGED, {
+      await safeTrigger(roomChannel(roomCode), PUSHER_EVENTS.PHASE_CHANGED, {
         phase: 'night',
         round: room.round,
       });
@@ -52,14 +52,14 @@ export async function POST(req: NextRequest) {
       await setRoom(room);
 
       if (room.phase === 'game-over') {
-        await pusherServer.trigger(roomChannel(roomCode), PUSHER_EVENTS.PHASE_CHANGED, {
+        await safeTrigger(roomChannel(roomCode), PUSHER_EVENTS.PHASE_CHANGED, {
           phase: 'game-over',
           round: room.round,
           winner: nightWinner,
           players: Object.fromEntries(Object.entries(room.players).map(([id, p]) => [id, p])),
         });
       } else {
-        await pusherServer.trigger(roomChannel(roomCode), PUSHER_EVENTS.PHASE_CHANGED, {
+        await safeTrigger(roomChannel(roomCode), PUSHER_EVENTS.PHASE_CHANGED, {
           phase: 'day',
           round: room.round,
           dayResult,
@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
           const investigator = Object.values(room.players).find(p => p.role === 'investigator' && p.isAlive);
           const target = room.players[room.nightActions.investigatorTarget];
           if (investigator && target) {
-            await pusherServer.trigger(playerChannel(investigator.id), PUSHER_EVENTS.INVESTIGATOR_RESULT, {
+            await safeTrigger(playerChannel(investigator.id), PUSHER_EVENTS.INVESTIGATOR_RESULT, {
               round: room.round,
               targetId: target.id,
               targetName: target.name,
@@ -86,7 +86,7 @@ export async function POST(req: NextRequest) {
       room.phase = 'voting';
       room.votes = {};
       await setRoom(room);
-      await pusherServer.trigger(roomChannel(roomCode), PUSHER_EVENTS.PHASE_CHANGED, {
+      await safeTrigger(roomChannel(roomCode), PUSHER_EVENTS.PHASE_CHANGED, {
         phase: 'voting',
         round: room.round,
       });
@@ -110,14 +110,14 @@ export async function POST(req: NextRequest) {
       await setRoom(room);
 
       if (room.phase === 'game-over') {
-        await pusherServer.trigger(roomChannel(roomCode), PUSHER_EVENTS.PHASE_CHANGED, {
+        await safeTrigger(roomChannel(roomCode), PUSHER_EVENTS.PHASE_CHANGED, {
           phase: 'game-over',
           round: room.round,
           winner: voteWinner,
           players: Object.fromEntries(Object.entries(room.players).map(([id, p]) => [id, p])),
         });
       } else {
-        await pusherServer.trigger(roomChannel(roomCode), PUSHER_EVENTS.PHASE_CHANGED, {
+        await safeTrigger(roomChannel(roomCode), PUSHER_EVENTS.PHASE_CHANGED, {
           phase: 'vote-result',
           round: room.round,
           voteResult,
@@ -134,7 +134,7 @@ export async function POST(req: NextRequest) {
       room.votes = {};
       room.lastVoteResult = null;
       await setRoom(room);
-      await pusherServer.trigger(roomChannel(roomCode), PUSHER_EVENTS.PHASE_CHANGED, {
+      await safeTrigger(roomChannel(roomCode), PUSHER_EVENTS.PHASE_CHANGED, {
         phase: 'night',
         round: room.round,
       });
@@ -155,7 +155,7 @@ export async function POST(req: NextRequest) {
         p.isAlive = true;
       });
       await setRoom(room);
-      await pusherServer.trigger(roomChannel(roomCode), PUSHER_EVENTS.PHASE_CHANGED, {
+      await safeTrigger(roomChannel(roomCode), PUSHER_EVENTS.PHASE_CHANGED, {
         phase: 'lobby',
         round: 0,
       });

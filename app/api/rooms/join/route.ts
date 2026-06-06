@@ -14,27 +14,17 @@ export async function POST(req: NextRequest) {
   const code = roomCode.trim().toUpperCase();
   const room = await getRoom(code);
 
-  if (!room) {
-    return NextResponse.json({ error: 'Room not found' }, { status: 404 });
-  }
-
-  if (room.phase !== 'lobby') {
-    return NextResponse.json({ error: 'Game already in progress' }, { status: 409 });
-  }
+  if (!room) return NextResponse.json({ error: 'Room not found' }, { status: 404 });
+  if (room.phase !== 'lobby') return NextResponse.json({ error: 'Game already in progress' }, { status: 409 });
 
   const playerCount = Object.keys(room.players).length;
-
-  if (playerCount >= room.settings.maxPlayers) {
-    return NextResponse.json({ error: 'Room is full' }, { status: 409 });
-  }
+  if (playerCount >= room.settings.maxPlayers) return NextResponse.json({ error: 'Room is full' }, { status: 409 });
 
   const playerId = generatePlayerId();
-  const avatarIndex = playerCount % AVATAR_COLORS.length;
-
   const player: Player = {
     id: playerId,
     name: playerName.trim().slice(0, 20),
-    avatarIndex,
+    avatarIndex: playerCount % AVATAR_COLORS.length,
     role: null,
     isAlive: true,
     isHost: false,
@@ -44,12 +34,14 @@ export async function POST(req: NextRequest) {
   room.players[playerId] = player;
   await setRoom(room);
 
-  const publicPlayer = { ...player, role: undefined };
-  delete (publicPlayer as Record<string, unknown>).role;
+  const { role: _role, ...publicPlayer } = player;
+  void _role;
 
-  await pusherServer.trigger(roomChannel(code), PUSHER_EVENTS.PLAYER_JOINED, {
-    player: publicPlayer,
-  });
+  try {
+    await pusherServer.trigger(roomChannel(code), PUSHER_EVENTS.PLAYER_JOINED, { player: publicPlayer });
+  } catch (e) {
+    console.error('[Pusher] trigger failed:', (e as Error).message);
+  }
 
   return NextResponse.json({ roomCode: code, playerId });
 }

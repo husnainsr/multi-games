@@ -9,7 +9,7 @@ import { Toggle } from '@/components/ui/Toggle';
 import { PUSHER_EVENTS, roomChannel } from '@/lib/pusher';
 import { getMinPlayers } from '@/lib/game-engine';
 import type { GameRoom, GameSettings } from '@/lib/types';
-import { Copy, Check, Crown, Play, Settings, Users } from 'lucide-react';
+import { Copy, Check, Crown, Play, Settings, Users, X } from 'lucide-react';
 
 export default function LobbyPage({ params }: { params: Promise<{ roomCode: string }> }) {
   const { roomCode } = use(params);
@@ -54,6 +54,21 @@ export default function LobbyPage({ params }: { params: Promise<{ roomCode: stri
       const { phase } = data as { phase: string };
       if (phase === 'starting') router.push(`/game/${roomCode}`);
     }, [roomCode, router]),
+    [PUSHER_EVENTS.PLAYER_KICKED]: useCallback((data: unknown) => {
+      const { playerId: kickedId } = data as { playerId: string };
+      setRoom(prev => {
+        if (!prev) return prev;
+        const players = { ...prev.players };
+        delete players[kickedId];
+        return { ...prev, players };
+      });
+      // If this client is the one kicked, send them home
+      const myId = localStorage.getItem(`player:${roomCode}`);
+      if (myId === kickedId) {
+        localStorage.removeItem(`player:${roomCode}`);
+        router.replace('/');
+      }
+    }, [roomCode, router]),
   };
 
   usePusherChannel(
@@ -66,11 +81,19 @@ export default function LobbyPage({ params }: { params: Promise<{ roomCode: stri
 
   async function updateSetting(patch: Partial<GameSettings>) {
     if (!room || !playerId) return;
-    await fetch('/api/game/settings', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ roomCode, playerId, settings: { ...room.settings, ...patch } }),
-    });
+    // Optimistic update — UI reflects instantly
+    const newSettings = { ...room.settings, ...patch };
+    setRoom(prev => prev ? { ...prev, settings: newSettings } : prev);
+    try {
+      await fetch('/api/game/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roomCode, playerId, settings: newSettings }),
+      });
+    } catch {
+      // Revert on failure
+      setRoom(prev => prev ? { ...prev, settings: room.settings } : prev);
+    }
   }
 
   async function startGame() {
@@ -88,6 +111,15 @@ export default function LobbyPage({ params }: { params: Promise<{ roomCode: stri
       setError(e instanceof Error ? e.message : 'Failed to start');
       setStarting(false);
     }
+  }
+
+  async function kickPlayer(targetId: string) {
+    if (!playerId) return;
+    await fetch('/api/game/kick', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ roomCode, playerId, targetId }),
+    });
   }
 
   function copyCode() {
@@ -167,6 +199,15 @@ export default function LobbyPage({ params }: { params: Promise<{ roomCode: stri
                   </div>
                   {player.isHost && (
                     <Crown className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                  )}
+                  {isHost && player.id !== playerId && (
+                    <button
+                      onClick={() => kickPlayer(player.id)}
+                      className="ml-auto p-1 rounded-md text-gray-600 hover:text-red-400 hover:bg-red-500/10 transition-colors flex-shrink-0"
+                      title="Kick player"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
                   )}
                 </motion.div>
               ))}

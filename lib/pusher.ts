@@ -21,3 +21,11 @@ export const PUSHER_EVENTS = {
 
 export const roomChannel = (code: string) => `room-${code}`;
 export const playerChannel = (playerId: string) => `private-player-${playerId}`;
+
+export async function safeTrigger(channel: string, event: string, data: unknown) {
+  try {
+    await pusherServer.trigger(channel, event, data as object);
+  } catch (e) {
+    console.error('[Pusher] trigger failed on', channel, event, (e as Error).message);
+  }
+}

@@ -21,9 +21,11 @@ export async function PATCH(req: NextRequest) {
   room.settings = updated;
   await setRoom(room);
 
-  await pusherServer.trigger(roomChannel(roomCode), PUSHER_EVENTS.SETTINGS_UPDATED, {
-    settings: updated,
-  });
+  try {
+    await pusherServer.trigger(roomChannel(roomCode), PUSHER_EVENTS.SETTINGS_UPDATED, { settings: updated });
+  } catch (e) {
+    console.error('[Pusher] settings trigger failed:', (e as Error).message);
+  }
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, settings: updated });
 }

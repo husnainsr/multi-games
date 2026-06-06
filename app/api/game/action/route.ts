@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getRoom, setRoom } from '@/lib/store';
-import { pusherServer, roomChannel, playerChannel, PUSHER_EVENTS } from '@/lib/pusher';
+import { safeTrigger, roomChannel, playerChannel, PUSHER_EVENTS } from '@/lib/pusher';
 import {
   allNightActionsSubmitted,
   processNightActions,
@@ -11,7 +11,6 @@ import type { Role } from '@/lib/types';
 
 export async function POST(req: NextRequest) {
   const { roomCode, playerId, targetId } = await req.json();
-  // targetId: string | null (null = skip)
 
   const room = await getRoom(roomCode);
   if (!room) return NextResponse.json({ error: 'Room not found' }, { status: 404 });
@@ -34,54 +33,35 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No night action for villager' }, { status: 400 });
   }
 
-  // Check if all actions done → auto-advance to day
   if (allNightActionsSubmitted(room)) {
     const dayResult = processNightActions(room);
+    if (dayResult.eliminatedPlayerId) room.players[dayResult.eliminatedPlayerId].isAlive = false;
 
-    // Eliminate player if needed
-    if (dayResult.eliminatedPlayerId) {
-      room.players[dayResult.eliminatedPlayerId].isAlive = false;
-    }
-
+    const savedInvestigatorTarget = room.nightActions.investigatorTarget;
     room.lastDayResult = dayResult;
     room.phase = 'day';
     room.nightActions = { ...EMPTY_NIGHT_ACTIONS };
     room.votes = {};
 
     const winner = checkWinCondition(room.players);
-    if (winner) {
-      room.winner = winner;
-      room.phase = 'game-over';
-    }
+    if (winner) { room.winner = winner; room.phase = 'game-over'; }
 
     await setRoom(room);
 
     if (room.phase === 'game-over') {
-      await pusherServer.trigger(roomChannel(roomCode), PUSHER_EVENTS.PHASE_CHANGED, {
-        phase: 'game-over',
-        round: room.round,
-        winner,
-        players: Object.fromEntries(
-          Object.entries(room.players).map(([id, p]) => [id, p])
-        ),
+      await safeTrigger(roomChannel(roomCode), PUSHER_EVENTS.PHASE_CHANGED, {
+        phase: 'game-over', round: room.round, winner,
+        players: Object.fromEntries(Object.entries(room.players).map(([id, p]) => [id, p])),
       });
     } else {
-      await pusherServer.trigger(roomChannel(roomCode), PUSHER_EVENTS.PHASE_CHANGED, {
-        phase: 'day',
-        round: room.round,
-        dayResult,
-      });
+      await safeTrigger(roomChannel(roomCode), PUSHER_EVENTS.PHASE_CHANGED, { phase: 'day', round: room.round, dayResult });
 
-      // Send investigator their result
-      if (room.nightActions.investigatorTarget) {
+      if (savedInvestigatorTarget) {
         const investigator = Object.values(room.players).find(p => p.role === 'investigator' && p.isAlive);
-        const target = room.players[room.nightActions.investigatorTarget];
+        const target = room.players[savedInvestigatorTarget];
         if (investigator && target) {
-          await pusherServer.trigger(playerChannel(investigator.id), PUSHER_EVENTS.INVESTIGATOR_RESULT, {
-            round: room.round,
-            targetId: target.id,
-            targetName: target.name,
-            isMafia: target.role === 'mafia',
+          await safeTrigger(playerChannel(investigator.id), PUSHER_EVENTS.INVESTIGATOR_RESULT, {
+            round: room.round, targetId: target.id, targetName: target.name, isMafia: target.role === 'mafia',
           });
         }
       }

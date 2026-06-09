@@ -66,7 +66,8 @@ export async function POST(req: NextRequest) {
         const target = room.players[savedInvestigatorTarget];
         if (investigator && target) {
           await safeTrigger(playerChannel(investigator.id), PUSHER_EVENTS.INVESTIGATOR_RESULT, {
-            round: room.round, targetId: target.id, targetName: target.name, isMafia: target.role === 'mafia',
+            round: room.round, targetId: target.id, targetName: target.name,
+            isMafia: target.role === 'mafia', targetRole: target.role,
           });
         }
       }

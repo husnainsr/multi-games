@@ -79,6 +79,7 @@ export async function POST(req: NextRequest) {
               targetId: target.id,
               targetName: target.name,
               isMafia: target.role === 'mafia',
+              targetRole: target.role,
             });
           }
         }

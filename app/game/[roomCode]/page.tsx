@@ -740,7 +740,7 @@ export default function GamePage({ params }: { params: Promise<{ roomCode: strin
     }
   }, [room, roomCode, router]);
 
-  // Polling fallback: if Pusher event is missed, sync phase from server every 5s
+  // Polling fallback: if Pusher event is missed, sync state from server every 3s
   useEffect(() => {
     if (!roomCode || !playerId) return;
     const id = setInterval(() => {
@@ -748,10 +748,11 @@ export default function GamePage({ params }: { params: Promise<{ roomCode: strin
         .then(r => r.json())
         .then((data: GameRoom) => {
           if (!data || (data as unknown as { error: string }).error) return;
+          // Always update votes so voting phase stays in sync even without Pusher
+          setVotes(data.votes || {});
           setPhase(prev => {
             if (prev !== data.phase) {
               setRoom(data);
-              setVotes(data.votes || {});
               if (data.lastDayResult) setCurrentDayResult(data.lastDayResult);
               if (data.lastVoteResult) setCurrentVoteResult(data.lastVoteResult);
             }
@@ -759,7 +760,7 @@ export default function GamePage({ params }: { params: Promise<{ roomCode: strin
           });
         })
         .catch(() => {});
-    }, 5000);
+    }, 3000);
     return () => clearInterval(id);
   }, [roomCode, playerId]);
 
@@ -813,7 +814,12 @@ export default function GamePage({ params }: { params: Promise<{ roomCode: strin
     }, []),
 
     [PUSHER_EVENTS.INVESTIGATOR_RESULT]: useCallback((data: unknown) => {
-      setInvestigatorResults(prev => [...prev, data as PusherInvestigatorResult]);
+      const result = data as PusherInvestigatorResult;
+      setInvestigatorResults(prev => [...prev, result]);
+      // Flip the investigated player's card on this device only (private channel)
+      if (result.targetRole) {
+        setRevealedRoles(prev => ({ ...prev, [result.targetId]: result.targetRole }));
+      }
     }, []),
   };
 

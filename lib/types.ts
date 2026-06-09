@@ -75,6 +75,7 @@ export interface PusherInvestigatorResult {
   targetId: string;
   targetName: string;
   isMafia: boolean;
+  targetRole: Role;
 }
 export interface PusherPhaseChanged {
   phase: GamePhase;

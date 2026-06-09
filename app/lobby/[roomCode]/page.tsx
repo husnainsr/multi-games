@@ -3,14 +3,13 @@ import { useEffect, useState, useCallback, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { usePusherChannel } from '@/hooks/usePusher';
-import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { GameCard } from '@/components/ui/GameCard';
 import { Toggle } from '@/components/ui/Toggle';
 import { PUSHER_EVENTS, roomChannel } from '@/lib/pusher';
 import { getMinPlayers } from '@/lib/game-engine';
 import type { GameRoom, GameSettings } from '@/lib/types';
-import { Copy, Check, Crown, Play, Settings, Users, X } from 'lucide-react';
+import { Copy, Check, Play, Settings, Users } from 'lucide-react';
 
 export default function LobbyPage({ params }: { params: Promise<{ roomCode: string }> }) {
   const { roomCode } = use(params);
@@ -188,9 +187,10 @@ export default function LobbyPage({ params }: { params: Promise<{ roomCode: stri
         </button>
       </header>
 
-      <div className="flex flex-1 overflow-hidden">
+      {/* Main content — stacks vertically on mobile, side-by-side on desktop */}
+      <div className="flex flex-col lg:flex-row flex-1 min-h-0 overflow-y-auto lg:overflow-hidden">
         {/* Players column */}
-        <div className="flex-1 p-6 flex flex-col gap-4 overflow-y-auto">
+        <div className="flex-1 p-4 sm:p-6 flex flex-col gap-4 lg:overflow-y-auto">
           <div className="flex items-center gap-2 mb-2">
             <Users className="w-4 h-4 text-gray-500" />
             <span className="text-sm text-gray-400 font-medium">
@@ -233,115 +233,26 @@ export default function LobbyPage({ params }: { params: Promise<{ roomCode: stri
           </div>
         </div>
 
-        {/* Settings panel (host only) */}
+        {/* Settings panel (host only) — right panel on desktop, expandable section on mobile */}
         {isHost && (
-          <div className="w-72 border-l border-gray-800 p-6 flex flex-col gap-6 overflow-y-auto">
-            <div className="flex items-center gap-2">
-              <Settings className="w-4 h-4 text-gray-500" />
-              <span className="text-sm font-semibold text-gray-300">Game Settings</span>
-            </div>
-
-            {/* Mafia count */}
-            <div className="flex flex-col gap-2">
-              <label className="text-sm text-gray-400">Mafia Players</label>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => updateSetting({ mafiaCount: Math.max(1, settings.mafiaCount - 1) })}
-                  className="w-8 h-8 rounded-lg bg-gray-800 hover:bg-gray-700 text-white font-bold flex items-center justify-center transition-colors"
-                >−</button>
-                <span className="text-xl font-bold text-white w-8 text-center">{settings.mafiaCount}</span>
-                <button
-                  onClick={() => updateSetting({ mafiaCount: Math.min(4, settings.mafiaCount + 1) })}
-                  className="w-8 h-8 rounded-lg bg-gray-800 hover:bg-gray-700 text-white font-bold flex items-center justify-center transition-colors"
-                >+</button>
-              </div>
-            </div>
-
-            {/* Roles */}
-            <div className="flex flex-col gap-3">
-              <Toggle
-                checked={settings.hasDoctor}
-                onChange={v => updateSetting({ hasDoctor: v })}
-                label="💉 Doctor Role"
-                description="Saves a player each night"
-              />
-              <Toggle
-                checked={settings.hasInvestigator}
-                onChange={v => updateSetting({ hasInvestigator: v })}
-                label="🔍 Investigator Role"
-                description="Reveals Mafia identity"
-              />
-            </div>
-
-            {/* Timers */}
-            <div className="flex flex-col gap-3">
-              <span className="text-sm text-gray-400 font-medium">Phase Timers</span>
-              {[
-                { key: 'nightDuration' as const, label: '🌙 Night', min: 0, max: 120, step: 15 },
-                { key: 'dayDuration' as const, label: '☀️ Day', min: 0, max: 300, step: 30 },
-                { key: 'voteDuration' as const, label: '🗳️ Vote', min: 0, max: 120, step: 15 },
-              ].map(({ key, label, min, max, step }) => (
-                <div key={key} className="flex flex-col gap-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-500">{label}</span>
-                    <span className="text-sm font-mono text-gray-300">
-                      {settings[key] === 0 ? '∞' : `${settings[key]}s`}
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min={min}
-                    max={max}
-                    step={step}
-                    value={settings[key]}
-                    onChange={e => updateSetting({ [key]: parseInt(e.target.value) })}
-                    className="w-full accent-red-500 h-1.5"
-                  />
-                </div>
-              ))}
-            </div>
-
-            {/* Other options */}
-            <Toggle
-              checked={settings.revealRoleOnDeath}
-              onChange={v => updateSetting({ revealRoleOnDeath: v })}
-              label="Reveal role on death"
-              description="Shows role when eliminated"
-            />
-
-            {/* Max players */}
-            <div className="flex flex-col gap-2">
-              <label className="text-sm text-gray-400">Max Players</label>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => updateSetting({ maxPlayers: Math.max(minPlayers, settings.maxPlayers - 1) })}
-                  className="w-8 h-8 rounded-lg bg-gray-800 hover:bg-gray-700 text-white font-bold flex items-center justify-center transition-colors"
-                >−</button>
-                <span className="text-xl font-bold text-white w-8 text-center">{settings.maxPlayers}</span>
-                <button
-                  onClick={() => updateSetting({ maxPlayers: Math.min(15, settings.maxPlayers + 1) })}
-                  className="w-8 h-8 rounded-lg bg-gray-800 hover:bg-gray-700 text-white font-bold flex items-center justify-center transition-colors"
-                >+</button>
-              </div>
-            </div>
-          </div>
+          <SettingsPanel settings={settings} minPlayers={minPlayers} updateSetting={updateSetting} />
         )}
       </div>
 
       {/* Bottom bar */}
-      <div className="border-t border-gray-800 px-6 py-4 flex items-center justify-between gap-4">
+      <div className="border-t border-gray-800 px-4 sm:px-6 py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div className="text-sm text-gray-500">
           {isHost ? 'You are the host' : 'Waiting for host to start the game...'}
         </div>
         {isHost && (
-          <div className="flex flex-col items-end gap-1">
+          <div className="flex flex-col items-stretch sm:items-end gap-1 w-full sm:w-auto">
             {error && <p className="text-xs text-red-400">{error}</p>}
             <Button
               onClick={startGame}
               loading={starting}
               disabled={!canStart}
               size="lg"
-              className="min-w-36"
+              className="w-full sm:w-auto sm:min-w-36"
             >
               <Play className="w-4 h-4" />
               Start Game
@@ -354,8 +265,131 @@ export default function LobbyPage({ params }: { params: Promise<{ roomCode: stri
 }
 
 function getGridClass(count: number) {
-  if (count <= 2) return "grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-md mx-auto w-full";
-  if (count <= 4) return "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-6 max-w-3xl mx-auto w-full";
-  if (count <= 6) return "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 max-w-5xl mx-auto w-full";
-  return "grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-4 w-full";
+  if (count <= 2) return "grid grid-cols-2 gap-4 max-w-xs mx-auto w-full";
+  if (count <= 4) return "grid grid-cols-2 sm:grid-cols-4 gap-4 max-w-xl mx-auto w-full";
+  if (count <= 6) return "grid grid-cols-3 sm:grid-cols-3 md:grid-cols-6 gap-3 max-w-3xl mx-auto w-full";
+  return "grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3 w-full";
+}
+
+function SettingsPanel({
+  settings,
+  minPlayers,
+  updateSetting,
+}: {
+  settings: GameSettings;
+  minPlayers: number;
+  updateSetting: (patch: Partial<GameSettings>) => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  const content = (
+    <div className="flex flex-col gap-5 p-4 sm:p-6">
+      <div className="flex flex-col gap-2">
+        <label className="text-sm text-gray-400">Mafia Players</label>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => updateSetting({ mafiaCount: Math.max(1, settings.mafiaCount - 1) })}
+            className="w-9 h-9 rounded-lg bg-gray-800 hover:bg-gray-700 text-white font-bold flex items-center justify-center transition-colors"
+          >−</button>
+          <span className="text-xl font-bold text-white w-8 text-center">{settings.mafiaCount}</span>
+          <button
+            onClick={() => updateSetting({ mafiaCount: Math.min(4, settings.mafiaCount + 1) })}
+            className="w-9 h-9 rounded-lg bg-gray-800 hover:bg-gray-700 text-white font-bold flex items-center justify-center transition-colors"
+          >+</button>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-3">
+        <Toggle
+          checked={settings.hasDoctor}
+          onChange={v => updateSetting({ hasDoctor: v })}
+          label="💉 Doctor Role"
+          description="Saves a player each night"
+        />
+        <Toggle
+          checked={settings.hasInvestigator}
+          onChange={v => updateSetting({ hasInvestigator: v })}
+          label="🔍 Investigator Role"
+          description="Reveals Mafia identity"
+        />
+      </div>
+
+      <div className="flex flex-col gap-3">
+        <span className="text-sm text-gray-400 font-medium">Phase Timers</span>
+        {[
+          { key: 'nightDuration' as const, label: '🌙 Night', min: 0, max: 120, step: 15 },
+          { key: 'dayDuration' as const, label: '☀️ Day', min: 0, max: 300, step: 30 },
+          { key: 'voteDuration' as const, label: '🗳️ Vote', min: 0, max: 120, step: 15 },
+        ].map(({ key, label, min, max, step }) => (
+          <div key={key} className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-gray-500">{label}</span>
+              <span className="text-sm font-mono text-gray-300">
+                {settings[key] === 0 ? '∞' : `${settings[key]}s`}
+              </span>
+            </div>
+            <input
+              type="range"
+              min={min}
+              max={max}
+              step={step}
+              value={settings[key]}
+              onChange={e => updateSetting({ [key]: parseInt(e.target.value) })}
+              className="w-full accent-red-500 h-1.5"
+            />
+          </div>
+        ))}
+      </div>
+
+      <Toggle
+        checked={settings.revealRoleOnDeath}
+        onChange={v => updateSetting({ revealRoleOnDeath: v })}
+        label="Reveal role on death"
+        description="Shows role when eliminated"
+      />
+
+      <div className="flex flex-col gap-2">
+        <label className="text-sm text-gray-400">Max Players</label>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => updateSetting({ maxPlayers: Math.max(minPlayers, settings.maxPlayers - 1) })}
+            className="w-9 h-9 rounded-lg bg-gray-800 hover:bg-gray-700 text-white font-bold flex items-center justify-center transition-colors"
+          >−</button>
+          <span className="text-xl font-bold text-white w-8 text-center">{settings.maxPlayers}</span>
+          <button
+            onClick={() => updateSetting({ maxPlayers: Math.min(15, settings.maxPlayers + 1) })}
+            className="w-9 h-9 rounded-lg bg-gray-800 hover:bg-gray-700 text-white font-bold flex items-center justify-center transition-colors"
+          >+</button>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <>
+      {/* Desktop: fixed right panel */}
+      <div className="hidden lg:flex lg:w-72 border-l border-gray-800 flex-col overflow-y-auto">
+        <div className="flex items-center gap-2 p-6 pb-0">
+          <Settings className="w-4 h-4 text-gray-500" />
+          <span className="text-sm font-semibold text-gray-300">Game Settings</span>
+        </div>
+        {content}
+      </div>
+
+      {/* Mobile: collapsible section at bottom of player list */}
+      <div className="lg:hidden border-t border-gray-800">
+        <button
+          onClick={() => setOpen(v => !v)}
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-white transition-colors"
+        >
+          <span className="flex items-center gap-2">
+            <Settings className="w-4 h-4" />
+            Game Settings
+          </span>
+          <span className="text-gray-600">{open ? '▲' : '▼'}</span>
+        </button>
+        {open && content}
+      </div>
+    </>
+  );
 }

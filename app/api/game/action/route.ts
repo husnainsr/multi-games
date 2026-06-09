@@ -24,6 +24,9 @@ export async function POST(req: NextRequest) {
   if (role === 'mafia') {
     room.nightActions.mafiaVotes[playerId] = targetId ?? null;
   } else if (role === 'doctor') {
+    if (targetId && targetId === room.doctorLastTarget) {
+      return NextResponse.json({ error: 'You cannot protect the same person two rounds in a row' }, { status: 400 });
+    }
     room.nightActions.doctorTarget = targetId ?? null;
     room.nightActions.doctorSubmitted = true;
   } else if (role === 'investigator') {
@@ -38,9 +41,11 @@ export async function POST(req: NextRequest) {
     if (dayResult.eliminatedPlayerId) room.players[dayResult.eliminatedPlayerId].isAlive = false;
 
     const savedInvestigatorTarget = room.nightActions.investigatorTarget;
+    const savedDoctorTarget = room.nightActions.doctorTarget;
     room.lastDayResult = dayResult;
     room.phase = 'day';
     room.nightActions = { ...EMPTY_NIGHT_ACTIONS };
+    room.doctorLastTarget = savedDoctorTarget;
     room.votes = {};
 
     const winner = checkWinCondition(room.players);

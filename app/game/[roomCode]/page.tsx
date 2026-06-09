@@ -144,7 +144,7 @@ function RoleReveal({
           {/* Back face */}
           <div
             className="absolute inset-0 rounded-2xl overflow-hidden shadow-2xl"
-            style={{ backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}
+            style={{ backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden', transform: 'rotateY(0deg)' }}
           >
             <img
               src="/backside_card.png"
@@ -229,7 +229,6 @@ function NightPhase({
 }: { room: GameRoom; playerId: string; myRole: Role | null; revealedRoles: Record<string, Role>; onAction: (targetId: string | null) => void; onAdvance: () => void }) {
   const me = room.players[playerId];
   const role = myRole;
-  const [selected, setSelected] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
 
   const canAct = role && role !== 'villager' && !submitted;
@@ -242,19 +241,16 @@ function NightPhase({
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] flex flex-col" style={{ background: 'radial-gradient(ellipse at top, #0f0a1e 0%, #0a0a0f 60%)' }}>
-      <div className="px-6 py-5 border-b border-gray-800">
+      <div className="px-4 sm:px-6 py-4 border-b border-gray-800">
         <div className="flex items-center justify-between mb-1">
-          <span className="text-lg font-bold text-white">🌙 Night — Round {room.round}</span>
+          <span className="text-base sm:text-lg font-bold text-white">🌙 Night — Round {room.round}</span>
         </div>
         {room.settings.nightDuration > 0 && (
-          <TimerBar
-            initial={room.settings.nightDuration}
-            onExpire={onAdvance}
-          />
+          <TimerBar initial={room.settings.nightDuration} onExpire={onAdvance} />
         )}
       </div>
 
-      <div className="flex-1 flex flex-col items-center justify-center p-6 max-w-4xl mx-auto w-full">
+      <div className="flex-1 flex flex-col items-center justify-start p-4 sm:p-6 max-w-4xl mx-auto w-full gap-4">
         <AnimatePresence mode="wait">
           {!me?.isAlive ? (
             <motion.div key="dead" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-6">
@@ -274,44 +270,17 @@ function NightPhase({
               <p className="text-gray-600 mt-2">Wait for morning to come</p>
             </motion.div>
           ) : (
-            <motion.div
-              key="action"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="w-full max-w-xl"
-            >
-              <div className="glass rounded-2xl p-6 mb-6 text-center">
-                <div className="flex flex-col items-center gap-3">
-                  <span className="text-4xl">
-                    {role === 'mafia' ? '🔪' : role === 'doctor' ? '💉' : '🔍'}
-                  </span>
-                  <div>
-                    <h3 className="font-bold text-lg text-white" style={{ color: role ? ROLE_CONFIG[role].color : undefined }}>
-                      {role ? ROLE_CONFIG[role].label : ''} Turn
-                    </h3>
-                    <p className="text-sm text-gray-400 mt-1">
-                      {role === 'mafia' ? 'Choose your target to eliminate from the players grid below' :
-                        role === 'doctor' ? 'Choose someone to protect tonight from the players grid below' :
-                          'Choose someone to investigate from the players grid below'}
-                    </p>
-                  </div>
-                </div>
-
+            <motion.div key="action" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="w-full">
+              <div className="glass rounded-2xl p-4 sm:p-5 text-center">
                 {submitted ? (
-                  <div className="flex items-center gap-2 text-green-400 justify-center py-2 mt-4">
+                  <div className="flex items-center gap-2 text-green-400 justify-center py-1">
                     <span className="text-lg">✓</span>
-                    <span className="font-medium">Action submitted</span>
+                    <span className="font-medium">Done — waiting for others</span>
                   </div>
                 ) : (
-                  <div className="flex justify-center gap-3 mt-6">
-                    <Button
-                      onClick={() => submit(selected)}
-                      disabled={!selected && !!canAct}
-                      className="px-6"
-                    >
-                      {selected ? `Confirm ${role === 'mafia' ? 'Kill' : role === 'doctor' ? 'Protect' : 'Investigate'}` : 'Select a player below'}
-                    </Button>
-                    <Button variant="ghost" onClick={() => submit(null)}>
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm text-gray-400 text-left">Tap a player to choose your target</p>
+                    <Button variant="ghost" size="sm" onClick={() => submit(null)} className="shrink-0 text-gray-500 text-xs">
                       Skip
                     </Button>
                   </div>
@@ -321,9 +290,8 @@ function NightPhase({
           )}
         </AnimatePresence>
 
-        {/* Unified Player status grid */}
-        <div className="w-full mt-4">
-          <p className="text-xs text-gray-600 uppercase tracking-widest mb-3">Players</p>
+        {/* Player grid — tap a card to immediately submit the action */}
+        <div className="w-full">
           <div className={getGridClass(Object.keys(room.players).length)}>
             {Object.values(room.players).sort((a, b) => a.joinedAt - b.joinedAt).map(player => {
               const isTargetable = !!(canAct && player.isAlive && (role === 'doctor' || player.id !== playerId));
@@ -334,8 +302,7 @@ function NightPhase({
                   isMe={player.id === playerId}
                   revealedRole={player.id === playerId ? myRole : (player.role || revealedRoles[player.id])}
                   isInteractive={isTargetable}
-                  isSelected={selected === player.id}
-                  onClick={isTargetable ? () => setSelected(prev => prev === player.id ? null : player.id) : undefined}
+                  onClick={isTargetable ? () => submit(player.id) : undefined}
                 />
               );
             })}
@@ -347,10 +314,10 @@ function NightPhase({
 }
 
 function DayPhase({
-  room, playerId, myRole, revealedRoles, dayResult, onAdvance, investigatorResult
+  room, playerId, myRole, revealedRoles, dayResult, onAdvance, investigatorResults
 }: {
   room: GameRoom; playerId: string; myRole: Role | null; revealedRoles: Record<string, Role>;
-  dayResult: DayResult | null; onAdvance: () => void; investigatorResult: PusherInvestigatorResult | null;
+  dayResult: DayResult | null; onAdvance: () => void; investigatorResults: PusherInvestigatorResult[];
 }) {
   const isHost = room.hostId === playerId;
   const isInvestigator = myRole === 'investigator';
@@ -406,31 +373,32 @@ function DayPhase({
           )}
         </motion.div>
 
-        {/* Investigator result (private) */}
-        <AnimatePresence>
-          {isInvestigator && investigatorResult && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="w-full rounded-xl p-4 border"
-              style={{
-                background: investigatorResult.isMafia ? '#7f1d1d44' : '#14532d44',
-                borderColor: investigatorResult.isMafia ? '#ef444440' : '#22c55e40',
-              }}
-            >
-              <p className="text-xs text-gray-500 uppercase tracking-widest mb-1">Investigation Result</p>
-              <p className="text-white font-semibold">
-                <span style={{ color: investigatorResult.isMafia ? '#ef4444' : '#22c55e' }}>
-                  {investigatorResult.targetName}
-                </span>
-                {' '}is{' '}
-                <span style={{ color: investigatorResult.isMafia ? '#ef4444' : '#22c55e' }}>
-                  {investigatorResult.isMafia ? '🔪 Mafia' : '✅ Not Mafia'}
-                </span>
-              </p>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {/* Investigator results (private — all rounds) */}
+        {isInvestigator && investigatorResults.length > 0 && (
+          <div className="w-full rounded-xl border border-blue-900/40 overflow-hidden">
+            <p className="text-xs text-gray-500 uppercase tracking-widest px-4 pt-3 pb-2 bg-blue-950/20">
+              🔍 Investigation Files
+            </p>
+            <div className="divide-y divide-gray-800/50">
+              {investigatorResults.map((r, i) => (
+                <motion.div
+                  key={`${r.targetId}-${r.round}-${i}`}
+                  initial={{ opacity: 0, x: -8 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  className="flex items-center justify-between px-4 py-2.5"
+                  style={{ background: r.isMafia ? '#7f1d1d22' : '#14532d22' }}
+                >
+                  <span className="text-sm text-white font-medium">
+                    Round {r.round} — {r.targetName}
+                  </span>
+                  <span className="text-sm font-bold" style={{ color: r.isMafia ? '#ef4444' : '#22c55e' }}>
+                    {r.isMafia ? '🔪 Mafia' : '✅ Innocent'}
+                  </span>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Players */}
         <div className="w-full">
@@ -710,7 +678,7 @@ export default function GamePage({ params }: { params: Promise<{ roomCode: strin
   const [currentDayResult, setCurrentDayResult] = useState<DayResult | null>(null);
   const [currentVoteResult, setCurrentVoteResult] = useState<VoteResult | null>(null);
   const [votes, setVotes] = useState<Record<string, string | null>>({});
-  const [investigatorResult, setInvestigatorResult] = useState<PusherInvestigatorResult | null>(null);
+  const [investigatorResults, setInvestigatorResults] = useState<PusherInvestigatorResult[]>([]);
   const [revealedRoles, setRevealedRoles] = useState<Record<string, Role>>({});
   // Only redirect to lobby after we've been in an active game phase — prevents
   // false fires when phase='lobby' is just the React initial state on fresh mount.
@@ -766,7 +734,7 @@ export default function GamePage({ params }: { params: Promise<{ roomCode: strin
       setCurrentDayResult(null);
       setCurrentVoteResult(null);
       setVotes({});
-      setInvestigatorResult(null);
+      setInvestigatorResults([]);
       setRevealedRoles({});
       router.replace(`/lobby/${roomCode}`);
     }
@@ -845,7 +813,7 @@ export default function GamePage({ params }: { params: Promise<{ roomCode: strin
     }, []),
 
     [PUSHER_EVENTS.INVESTIGATOR_RESULT]: useCallback((data: unknown) => {
-      setInvestigatorResult(data as PusherInvestigatorResult);
+      setInvestigatorResults(prev => [...prev, data as PusherInvestigatorResult]);
     }, []),
   };
 
@@ -939,7 +907,7 @@ export default function GamePage({ params }: { params: Promise<{ roomCode: strin
             revealedRoles={revealedRoles}
             dayResult={currentDayResult}
             onAdvance={() => advance('day')}
-            investigatorResult={investigatorResult}
+            investigatorResults={investigatorResults}
           />
         )}
 
@@ -977,8 +945,8 @@ export default function GamePage({ params }: { params: Promise<{ roomCode: strin
 }
 
 function getGridClass(count: number) {
-  if (count <= 2) return "grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-md mx-auto w-full";
-  if (count <= 4) return "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-6 max-w-3xl mx-auto w-full";
-  if (count <= 6) return "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 max-w-5xl mx-auto w-full";
-  return "grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-4 w-full";
+  if (count <= 2) return "grid grid-cols-2 gap-4 max-w-xs mx-auto w-full";
+  if (count <= 4) return "grid grid-cols-2 sm:grid-cols-4 gap-4 max-w-xl mx-auto w-full";
+  if (count <= 6) return "grid grid-cols-3 sm:grid-cols-3 md:grid-cols-6 gap-3 max-w-3xl mx-auto w-full";
+  return "grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3 w-full";
 }

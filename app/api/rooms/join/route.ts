@@ -5,7 +5,7 @@ import { pusherServer, roomChannel, PUSHER_EVENTS } from '@/lib/pusher';
 import type { Player } from '@/lib/types';
 
 export async function POST(req: NextRequest) {
-  const { roomCode, playerName } = await req.json();
+  const { roomCode, playerName, existingPlayerId } = await req.json();
 
   if (!roomCode?.trim() || !playerName?.trim()) {
     return NextResponse.json({ error: 'Room code and name are required' }, { status: 400 });
@@ -16,6 +16,11 @@ export async function POST(req: NextRequest) {
 
   if (!room) return NextResponse.json({ error: 'Room not found' }, { status: 404 });
   if (room.phase !== 'lobby') return NextResponse.json({ error: 'Game already in progress' }, { status: 409 });
+
+  // Rejoin: if the client already has a valid player slot, reuse it
+  if (existingPlayerId && room.players[existingPlayerId]) {
+    return NextResponse.json({ roomCode: code, playerId: existingPlayerId });
+  }
 
   const playerCount = Object.keys(room.players).length;
   if (playerCount >= room.settings.maxPlayers) return NextResponse.json({ error: 'Room is full' }, { status: 409 });

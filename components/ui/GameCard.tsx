@@ -92,6 +92,7 @@ export function GameCard({
           style={{
             backfaceVisibility: 'hidden',
             WebkitBackfaceVisibility: 'hidden',
+            transform: 'rotateY(0deg)',
           }}
         >
           <img

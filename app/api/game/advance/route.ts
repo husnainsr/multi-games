@@ -35,6 +35,9 @@ export async function POST(req: NextRequest) {
     }
 
     case 'night': {
+      const savedInvestigatorTarget = room.nightActions.investigatorTarget;
+      const savedDoctorTarget = room.nightActions.doctorTarget;
+
       const dayResult = processNightActions(room);
       if (dayResult.eliminatedPlayerId) {
         room.players[dayResult.eliminatedPlayerId].isAlive = false;
@@ -42,6 +45,7 @@ export async function POST(req: NextRequest) {
       room.lastDayResult = dayResult;
       room.phase = 'day';
       room.nightActions = { ...EMPTY_NIGHT_ACTIONS };
+      room.doctorLastTarget = savedDoctorTarget;
 
       const nightWinner = checkWinCondition(room.players);
       if (nightWinner) {
@@ -65,10 +69,10 @@ export async function POST(req: NextRequest) {
           dayResult,
         });
 
-        // Send investigator result
-        if (room.nightActions.investigatorTarget) {
+        // Send investigator result via private channel
+        if (savedInvestigatorTarget) {
           const investigator = Object.values(room.players).find(p => p.role === 'investigator' && p.isAlive);
-          const target = room.players[room.nightActions.investigatorTarget];
+          const target = room.players[savedInvestigatorTarget];
           if (investigator && target) {
             await safeTrigger(playerChannel(investigator.id), PUSHER_EVENTS.INVESTIGATOR_RESULT, {
               round: room.round,
@@ -150,6 +154,7 @@ export async function POST(req: NextRequest) {
       room.votes = {};
       room.lastDayResult = null;
       room.lastVoteResult = null;
+      room.doctorLastTarget = null;
       Object.values(room.players).forEach(p => {
         p.role = null;
         p.isAlive = true;

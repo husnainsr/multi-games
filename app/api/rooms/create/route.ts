@@ -37,6 +37,7 @@ export async function POST(req: NextRequest) {
     lastVoteResult: null,
     winner: null,
     createdAt: Date.now(),
+    doctorLastTarget: null,
   };
 
   await setRoom(room);

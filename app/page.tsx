@@ -45,10 +45,12 @@ export default function LandingPage() {
     if (!code.trim()) return setError('Enter room code');
     setLoading(true); setError('');
     try {
+      const roomKey = code.trim().toUpperCase();
+      const existingPlayerId = localStorage.getItem(`player:${roomKey}`) ?? undefined;
       const res = await fetch('/api/rooms/join', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ roomCode: code.trim().toUpperCase(), playerName: name.trim() }),
+        body: JSON.stringify({ roomCode: roomKey, playerName: name.trim(), existingPlayerId }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);

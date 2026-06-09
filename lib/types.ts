@@ -61,6 +61,7 @@ export interface GameRoom {
   lastVoteResult: VoteResult | null;
   winner: Team | null;
   createdAt: number;
+  doctorLastTarget: string | null; // doctor cannot protect same player two rounds in a row
 }
 
 // Pusher event payloads
